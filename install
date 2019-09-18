@@ -23,16 +23,21 @@ debug=1
 # tools we need in this script
 commands="date wget curl git docker diff"
 
-# attempt to colorize the output if tput exists
-if [ -x "$(command -v tput)" ]
-then
-	logevent "f:$FUNCNAME: true[0]: tput exists and is executable, setting colors"
-	GREEN="$(tput setaf 2)"
-	YELLOW="$(tput setaf 3)"
-	RED="$(tput setaf 1)"
-	RESET="$(tput setaf 15)"
-	#RESET="$(tput setaf 7)"  # check for tput colors = 8 | 256
-fi
+
+spinner () {
+	# care of http://fitnr.com/showing-a-bash-spinner.html
+	local pid=$1
+	local delay=0.75
+	local spinstr='|/-\'
+	while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+		local temp=${spinstr#?}
+		printf " [%c]  " "$spinstr"
+		local spinstr=$temp${spinstr%"$temp"}
+		sleep $delay
+		printf "\b\b\b\b\b\b"
+	done
+	printf "    \b\b\b\b"
+}
 
 checkCommand () {
 	# desc: check for the existence and executability of a command
@@ -121,9 +126,22 @@ logevent () {
 	fi
 }
 
+# attempt to colorize the output if tput exists
+# TODO: make this a function and a bit smarter
+if [ -x "$(command -v tput)" ]
+then
+	logevent "f:$FUNCNAME: true[0]: tput exists and is executable, setting colors"
+	GREEN="$(tput setaf 2)"
+	YELLOW="$(tput setaf 3)"
+	RED="$(tput setaf 1)"
+	RESET="$(tput setaf 15)"
+	#RESET="$(tput setaf 7)"  # check for tput colors = 8 | 256
+fi
+
 # main
 # checking for the things we need to make this work
 # check for commands and set var as $cmd_exists = 0/1 (true/false)
+# TODO: make some of the below functions
 for CMD in $commands
 do
 	var_name=${CMD}_exists
@@ -138,7 +156,7 @@ do
 	then
 		echo "[$GREEN ${!var_name} $RESET] $CMD exists"
 	else
-		echo "[$RED ${!var_name} $RESET] $CMD missing: install $CMD"
+		echo "[$RED ${!var_name} $RESET] $CMD missing: please install $CMD"
 		CHECKOK=1
 	fi
 done
@@ -199,8 +217,11 @@ fi
 # build docker image
 # TODO: attempt to pull image from dockerhub
 cd ntnx-api
-docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1
+echo "[$GREEN $? $RESET] building docker image...may take some time; (tail -f dockerbuild.log)"
+(docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1) &
+spinner $!
 if [ $? = 0 ]
+	# this logic is suspect with the spinner function...find a better test
 then
 	echo "[$GREEN $? $RESET] docker build of periplume/ntnx-api:v1 succeeded"
 else
@@ -210,5 +231,7 @@ fi
 
 # run and attach to the container
 echo "$GREEN PASS $RESET all tests passed...launching container now"
+sleep 3
+clear
 docker run -it periplume/ntnx-api:v1
 
