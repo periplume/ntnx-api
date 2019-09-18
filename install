@@ -231,6 +231,7 @@ fi
 
 # run and attach to the container
 echo "$GREEN PASS $RESET all tests passed...launching container now"
+# use printf and say launching in 3...2...1...
 sleep 3
 clear
 docker run -it periplume/ntnx-api:v1
