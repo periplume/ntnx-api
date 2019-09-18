@@ -26,6 +26,7 @@ and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 Can be installed with git:
 ```
 # git clone https://github.com/periplume/ntnx-api.git
+# cd ntnx-api ; ./install
 ```
 
 Can be installed with wget:
