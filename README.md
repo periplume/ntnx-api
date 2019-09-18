@@ -1,10 +1,10 @@
 # ntnx-api
-A containerized collection of icommand-line api tools for Nutanix.
+A containerized collection of command-line api tools for Nutanix.
 
-A simplified and easily reproducable development environment for the lazy among
-us.  Meant as a LAB environment for *demonstration* purposes only.  Terminal
-(command line) only.  **Not for production systems.  Use at your own risk.  Not
-supported by Nutanix.**
+Design goal: a simplified and easily reproducable development environment for
+the lazy among us.  Meant as a LAB environment for *demonstration* purposes
+only.  Terminal (command line) only.  **Not for production systems.  Use at your
+own risk.  Not supported by Nutanix.**
 
 You say API, I say let's *see it* in action.  I don't like GUIs, however pretty
 and delightful.  Everything is programmable.  Unbind yourself.  Automate!
@@ -17,10 +17,10 @@ and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 1. Python 3.7.4 (compiled from source)
 2. Openssl 1.1.1d (compiled from source)
 3. pip
-4. requests
+4. requests (HTTP library for Python: ```https://github.com/psf/requests```)
 5. vim
 6. cloud-init
-7. Sandeep Cariapa's api-lab scripts
+7. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
 
 ## Installation instructions
 Can be installed with git:
