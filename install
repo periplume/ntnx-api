@@ -211,7 +211,7 @@ if [ $? = 0 ]
 then
 	echo "[$GREEN $? $RESET] git clone of periplume/ntnx-api succeeded"
 else
-	echo "[$RED $? $RESET] git clone of periplume/ntnx-api failed"
+	echo "[$RED $? $RESET] git clone of periplume/ntnx-api failed; see gitclone.log"
 	CHECKOK=1
 fi
 
