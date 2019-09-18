@@ -31,7 +31,9 @@ WORKDIR /nutanix
 RUN git clone git://github.com/psf/requests.git
 RUN cd requests ; pip install .
 RUN git clone git://github.com/sandeep-car/api-lab.git
-RUN git clone git://github.com/periplume/nutanix.git
+ADD ntnx-api.splash .
+CMD cat ntnx-api.splash
 
+#RUN git clone git://github.com/periplume/nutanix.git
 # get cloud-init from git (rather than apt-get)
 # git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
