@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# name: install scipt for dockerized NTNX RestAPI dev env
+# author: jason lindemuth
+# v1.0
+# download the wrapper script with the command:
+# wget -O install https://github.com/periplume/ntnx-api/raw/master/install && chmod 755 install
+# or
+# curl -OL https://github.com/periplume/ntnx-api/raw/master/install && chmod 755 install
+# NOTE: the above is unreliable if file was recently committed
+#
+# debug with set -x
+
+scriptname=${0##*/}
+logfile=$scriptname.log
+rawgit=https://github.com/periplume/ntnx-api/raw/master
+rawgitself=$rawgit/$scriptname
+
+# set logging
+# 0 for nothing (silent)
+# 1 to log to $scriptname.log
+debug=1
+
+# tools we need in this script
+commands="date wget curl git docker diff"
+
+# attempt to colorize the output if tput exists
+if [ -x "$(command -v tput)" ]
+then
+	logevent "f:$FUNCNAME: true[0]: tput exists and is executable, setting colors"
+	GREEN="$(tput setaf 2)"
+	YELLOW="$(tput setaf 3)"
+	RED="$(tput setaf 1)"
+	RESET="$(tput setaf 15)"
+	#RESET="$(tput setaf 7)"  # check for tput colors = 8 | 256
+fi
+
+checkCommand () {
+	# desc: check for the existence and executability of a command
+	# arg: command name
+	# success: return 0
+	# failure: return 1
+	if [ -x "$(command -v $1)" ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: $1 exists and is executable"
+		return 0
+	else
+		logevent "f:$FUNCNAME: false[$?]: $1 missing or not executable"
+		return 1
+	fi
+}
+
+isOnline () {
+	# desc: determine if we're ONLINE
+	# args: none
+	# success: return 0 if online
+	# failure: return 1 if offline
+	# requires wget or curl, prefers wget
+	# TODO: assumes google.com = online: what about dark sites?
+	if [ $wget_exists = 0 ]
+	then
+		wget -q --spider http://www.google.com
+	elif [ ! $wget_exists = 0 ] && [ $curl_exists = 0 ]
+	then
+		curl -sSf http://www.google.com > /dev/null 2>&1
+	else
+		logevent "f:$FUNCNAME: error: missing wget and curl"
+		return 1 
+	fi
+	if [ $? = 0 ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: google.com is reachable"
+		return 0
+	else
+		logevent "f:$FUNCNAME: false[$?]: google.com is not reachable"
+		return 1
+	fi
+}
+
+isScriptCurrent () {
+	# desc: is this script itself current to remote git master branch
+	# args: none
+	# success: return 0 if files are same
+	# failure: return 1 if files are different
+	url=$rawgitself
+	logevent "f:$FUNCNAME: info: fetching install from raw github with wget"
+	wget -O install.gitmaster $url > /dev/null 2>&1
+	if [ $? = 0 ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: install fetched, comparing with local copy"
+		diff -q install install.gitmaster > /dev/null 2>&1
+		if [ $? = 0 ]
+		then
+			logevent "f:$FUNCNAME: true[$?]: local and gitmaster are the same"
+			return 0
+		else
+			logevent "f:$FUNCNAME: false[$?]: local and gitmaster differ"
+			return 1
+		fi
+	else
+		logevent "f:$FUNCNAME: false[$?]: could not fetch install with wget"
+		return 1
+	fi
+}
+
+timestamp () {
+	# desc: return a timestamp for logging
+  # args: none
+	# return format: 'YYYY-MM-DD HH:MM:SS SECONDS-SINCE-1970'
+  date '+%F %T %s'
+}
+
+logevent () {
+  # $@: one arg (multi word) the log message
+  # logs event to global logfile if debug=1
+	if [ $debug = 0 ]
+	then
+		return 0
+	elif [ $debug = 1 ]
+	then
+		echo "[$(timestamp)] $scriptname $@" >> $logfile
+	fi
+}
+
+# main
+# checking for the things we need to make this work
+# check for commands and set var as $cmd_exists = 0/1 (true/false)
+for CMD in $commands
+do
+	var_name=${CMD}_exists
+	checkCommand $CMD
+	if [ $? = 0 ]
+		then
+		eval ${var_name}='0'
+	else
+		eval ${var_name}='1'
+	fi
+	if [ ${!var_name} = 0 ]
+	then
+		echo "[$GREEN ${!var_name} $RESET] $CMD exists"
+	else
+		echo "[$RED ${!var_name} $RESET] $CMD missing: install $CMD"
+		CHECKOK=1
+	fi
+done
+
+if [ -n "$CHECKOK" ]
+then
+	echo "$RED FAIL $RESET prereqs not met, fix to proceed"
+	exit 1
+else
+	echo "$GREEN PASS $RESET command line tools tests passed"
+fi
+
+# check if we are online or not
+if [ $wget_exists = 0 ] || [ $curl_exists = 0 ]
+then
+	isOnline
+	if [ $? = 0 ]
+	then
+		ONLINE=0
+		echo "[$GREEN $ONLINE $RESET] ONLINE mode is true"
+	else
+		ONLINE=1
+		echo "[$RED $ONLINE $RESET] ONLINE mode is false"
+	fi
+else
+	echo "$RED ERROR: $RESET install wget or curl to continue"
+	exit 1
+fi
+
+# check for newer script (if ONLINE=0)
+# fetch the latest studio package
+if [ $wget_exists = 0 ] || [ $curl_exists = 0 ] && [ $ONLINE = 0 ]
+then
+	isScriptCurrent
+	if [ ! $? = 0 ]
+	then
+		echo "[$YELLOW $? $RESET] warn: $scriptname appears to differ from git master"
+		SCRIPT_CURRENT=1
+	else
+		SCRIPT_CURRENT=0
+		echo "[$GREEN $? $RESET] $scriptname is current"
+	fi
+elif [ $ONLINE = 1 ]
+then
+	echo "[$YELLOW $ONLINE $RESET] cannot check for latest $scriptname; offline"
+fi
+
+# fetch source
+git clone https://github.com/periplume/ntnx-api.git > gitclone.log 2>&1
+if [ $? = 0 ]
+then
+	echo "[$GREEN $? $RESET] git clone of periplume/ntnx-api succeeded"
+else
+	echo "[$RED $? $RESET] git clone of periplume/ntnx-api failed"
+	CHECKOK=1
+fi
+
+# build docker image
+# TODO: attempt to pull image from dockerhub
+cd ntnx-api
+docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1
+if [ $? = 0 ]
+then
+	echo "[$GREEN $? $RESET] docker build of periplume/ntnx-api:v1 succeeded"
+else
+	echo "[$RED $? $RESET] docker build of periplume/ntnx-api:v1 failed"
+	exit
+fi
+
+# run and attach to the container
+echo "$GREEN PASS $RESET all tests passed...launching container now"
+docker run -it periplume/ntnx-api:v1
+
