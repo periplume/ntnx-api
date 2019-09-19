@@ -23,7 +23,6 @@ debug=1
 # tools we need in this script
 commands="date wget curl git docker diff"
 
-
 spinner () {
 	# care of http://fitnr.com/showing-a-bash-spinner.html
 	local pid=$1
@@ -161,6 +160,10 @@ do
 	fi
 done
 
+if [ $wget_exists = 0 ] || [ $curl_exists = 0 ]
+then
+	CHECKOK=0
+fi
 if [ -n "$CHECKOK" ]
 then
 	echo "$RED FAIL $RESET prereqs not met, fix to proceed"
