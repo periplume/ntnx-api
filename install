@@ -86,8 +86,15 @@ isScriptCurrent () {
 	# success: return 0 if files are same
 	# failure: return 1 if files are different
 	url=$rawgitself
-	logevent "f:$FUNCNAME: info: fetching install from raw github with wget"
-	wget -O install.gitmaster $url > /dev/null 2>&1
+	if [ $wget_exists = 0 ]
+	then
+		logevent "f:$FUNCNAME: info: fetching install from raw github with wget"
+		wget -O install.gitmaster $url > /dev/null 2>&1
+	elif [ ! $wget_exists = 0 ] && [ $curl_exists = 0 ]
+	then
+		logevent "f:$FUNCNAME: info: fetching install from raw github with curl"
+		curl -OL -o install.gitmaster $url > /dev/null 2>&1
+	fi
 	if [ $? = 0 ]
 	then
 		logevent "f:$FUNCNAME: true[$?]: install fetched, comparing with local copy"
@@ -101,7 +108,7 @@ isScriptCurrent () {
 			return 1
 		fi
 	else
-		logevent "f:$FUNCNAME: false[$?]: could not fetch install with wget"
+		logevent "f:$FUNCNAME: false[$?]: could not fetch install"
 		return 1
 	fi
 }
