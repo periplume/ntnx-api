@@ -32,7 +32,7 @@ RUN git clone git://github.com/psf/requests.git
 RUN cd requests ; pip install .
 RUN git clone git://github.com/sandeep-car/api-lab.git
 ADD ntnx-api.splash .
-#CMD cat ntnx-api.splash
+CMD cat ntnt-api.splash && bash
 
 #RUN git clone git://github.com/periplume/nutanix.git
 # get cloud-init from git (rather than apt-get)
