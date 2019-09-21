@@ -25,15 +25,14 @@ ENV LDFLAGS="-L/usr/local/lib/"
 ENV LD_LIBRARY_PATH="/usr/local/lib/"
 ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
 RUN apt-get update
-RUN apt-get install -y vim git gawk wget curl cloud-init
 COPY --from=builder /usr/local /usr/local
+RUN apt-get install -y vim git gawk wget curl jq
+#RUN apt-get install -y vim git gawk wget curl jq cloud-init
 WORKDIR /nutanix
 RUN git clone git://github.com/psf/requests.git
 RUN cd requests ; pip install .
+RUN git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
 RUN git clone git://github.com/sandeep-car/api-lab.git
+RUN git clone git://github.com/periplume/nutanix.git
 ADD ntnx-api.splash .
-CMD cat ntnt-api.splash && bash
-
-#RUN git clone git://github.com/periplume/nutanix.git
-# get cloud-init from git (rather than apt-get)
-# git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
+CMD cat ntnx-api.splash && bash
