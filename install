@@ -250,7 +250,7 @@ fetchFiles () {
 	fi
 	for file in $files
 	do
-		eval $fetchpre $rawgit/$file
+		eval $fetchpre $rawgit/$file > /dev/null 2>&1
 	done
 }
 
@@ -292,7 +292,7 @@ run () {
 	# use printf and say launching in 3...2...1...
 	sleep 3
 	clear
-	docker run -v data:/nutanix/data -it periplume/ntnx-api:v1
+	docker run -v $(pwd)/data:/nutanix/data -it periplume/ntnx-api:v1
 }
 
 #
@@ -369,39 +369,4 @@ else
 		esac
 	done
 fi
-
-exit
-
-# fetch source
-# TODO: add logic to test for existing git clone
-git clone https://github.com/periplume/ntnx-api.git > gitclone.log 2>&1
-if [ $? = 0 ]
-then
-	echo "[$GREEN $? $RESET] git clone of periplume/ntnx-api succeeded"
-else
-	echo "[$RED $? $RESET] git clone of periplume/ntnx-api failed; see gitclone.log"
-	CHECKOK=1
-fi
-
-# build docker image
-# TODO: attempt to pull image from dockerhub (rather than build?)
-cd ntnx-api
-echo "[$GREEN $? $RESET] building docker image...may take some time; (tail -f dockerbuild.log)"
-(docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1) &
-spinner $!
-if [ $? = 0 ]
-	# this logic is suspect with the spinner function...find a better test
-then
-	echo "[$GREEN $? $RESET] docker build of periplume/ntnx-api:v1 succeeded"
-else
-	echo "[$RED $? $RESET] docker build of periplume/ntnx-api:v1 failed"
-	exit
-fi
-
-# run and attach to the container
-echo "$GREEN PASS $RESET all tests passed...launching container now"
-# use printf and say launching in 3...2...1...
-sleep 3
-clear
-docker run -it periplume/ntnx-api:v1
 
