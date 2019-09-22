@@ -39,7 +39,7 @@ RUN pip install jsonschema
 RUN git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
 RUN cd cloud-init ; python setup.py build
 RUN cd cloud-init ; python setup.py install
-RUN git clone https://github.com/nutanixdev/code-samples
+RUN git clone git://github.com/nutanixdev/code-samples.git
 RUN git clone git://github.com/sandeep-car/api-lab.git
 RUN git clone git://github.com/periplume/nutanix.git
 ADD ntnx-api.splash .
