@@ -26,12 +26,20 @@ ENV LD_LIBRARY_PATH="/usr/local/lib/"
 ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
 RUN apt-get update
 COPY --from=builder /usr/local /usr/local
-RUN apt-get install -y vim git gawk wget curl jq
-#RUN apt-get install -y vim git gawk wget curl jq cloud-init
+RUN apt-get install -y vim git gawk wget curl jq make
 WORKDIR /nutanix
+RUN python -m pip install --upgrade pip setuptools wheel
 RUN git clone git://github.com/psf/requests.git
 RUN cd requests ; pip install .
+RUN pip install jinja2
+RUN pip install configobj
+RUN pip install pyyaml
+RUN pip install jsonpatch
+RUN pip install jsonschema
 RUN git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
+RUN cd cloud-init ; python setup.py build
+RUN cd cloud-init ; python setup.py install
+RUN git clone https://github.com/nutanixdev/code-samples
 RUN git clone git://github.com/sandeep-car/api-lab.git
 RUN git clone git://github.com/periplume/nutanix.git
 ADD ntnx-api.splash .
