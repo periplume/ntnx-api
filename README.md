@@ -10,24 +10,18 @@ You say API, I say let's *see it* in action.  I don't like GUIs, however pretty
 and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 
 ## Requirements
-1. Linux (docker on mac planned)
+1. Linux or Mac
 2. Docker
 
 ## Includes
 1. Python 3.7.4 (compiled from source)
 2. Openssl 1.1.1d (compiled from source)
-3. pip
-4. requests (HTTP library for Python: ```https://github.com/psf/requests```)
-5. vim
-6. cloud-init
-7. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
+3. requests (HTTP library for Python: ```https://github.com/psf/requests```)
+4. vim
+5. cloud-init
+6. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
 
 ## Installation instructions
-Can be installed with git:
-```
-# git clone https://github.com/periplume/ntnx-api.git
-# cd ntnx-api ; ./install
-```
 
 Can be installed with wget:
 ```
@@ -39,6 +33,12 @@ Can be installed with curl:
 ```
 # curl -OL https://github.com/periplume/ntnx-api/raw/master/install && chmod 755 install
 # ./install
+```
+
+Can also be installed with git:
+```
+# git clone https://github.com/periplume/ntnx-api.git
+# cd ntnx-api ; ./install
 ```
 
 Built as a docker multi-stage image.  Before the multi-stage, the image size
