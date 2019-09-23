@@ -3,11 +3,12 @@
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
-#set -x
+
 scriptname=${0##*/}
 logfile=$scriptname.log
 rawgit=https://github.com/periplume/ntnx-api/raw/master
 rawgitself=$rawgit/$scriptname
+image=periplume/ntnx-api:v1
 
 # set logging
 # 0 for nothing (silent)
@@ -185,9 +186,9 @@ checkEnv () {
 		then
 			echo "[$GREEN ${!var_name} $RESET] $CMD exists"
 		# funky business to handle "need to have" vs "nice to have"
-		elif [ "$var_name" = "git_exists" ]
-		then
-			echo "[$YELLOW ${!var_name} $RESET] $CMD missing, will use wget|curl instead"
+		#elif [ "$var_name" = "git_exists" ]
+		#then
+		#	echo "[$YELLOW ${!var_name} $RESET] $CMD missing, will use wget|curl instead"
 		else
 			if [ "$var_name" = "wget_exists" ]
 			then
@@ -281,7 +282,8 @@ buildImage () {
 	# return 0 if success
 	# return 1 if build reports error
 	echo "[$GREEN $? $RESET] building docker image...may take some time; (tail -f dockerbuild.log)"
-	(docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1) &
+	#(docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1) &
+	(docker build --tag=$image . > dockerbuild.log 2>&1) &
 	spinner $!
 	echo "[$GREEN $? $RESET] success: run 'install run' next"
 }
@@ -292,7 +294,8 @@ run () {
 	# use printf and say launching in 3...2...1...
 	sleep 3
 	clear
-	docker run -v $(pwd)/data:/nutanix/data -it periplume/ntnx-api:v1
+	#docker run -v $(pwd)/data:/nutanix/data -it periplume/ntnx-api:v1
+	docker run -v $(pwd)/data:/nutanix/data -it $image
 }
 
 #
