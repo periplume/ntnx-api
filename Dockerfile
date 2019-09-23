@@ -17,7 +17,7 @@ RUN ln -s python3 /usr/local/bin/python
 RUN ln -s pip3 /usr/local/bin/pip
 RUN pip install --upgrade pip
 
-# stage 2, copy build artifacts
+# stage 2, copy build artifacts, install other binaries and packages
 FROM ubuntu:18.04
 LABEL maintainer="Jason Lindemuth <jason.lindemuth@nutanix.com>"
 ARG DEBIAN_FRONTEND=noninteractive
