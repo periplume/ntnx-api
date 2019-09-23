@@ -99,7 +99,7 @@ isScriptCurrent () {
 	elif [ ! $wget_exists = 0 ] && [ $curl_exists = 0 ]
 	then
 		logevent "f:$FUNCNAME: info: fetching install from raw github with curl"
-		curl -OL -o install.gitmaster $url > /dev/null 2>&1
+		curl -L -o install.gitmaster $url > /dev/null 2>&1
 	fi
 	if [ $? = 0 ]
 	then
