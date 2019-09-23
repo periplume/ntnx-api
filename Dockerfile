@@ -41,6 +41,5 @@ RUN cd cloud-init ; python setup.py build
 RUN cd cloud-init ; python setup.py install
 RUN git clone git://github.com/nutanixdev/code-samples.git
 RUN git clone git://github.com/sandeep-car/api-lab.git
-RUN git clone git://github.com/periplume/nutanix.git
 ADD ntnx-api.splash .
 CMD cat ntnx-api.splash && bash
