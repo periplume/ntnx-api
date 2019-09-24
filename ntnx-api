@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+# desc: cluster config setup script
+# author: Jason Lindemuth
+# source: https://github.com/periplume/ntnx-api
+# version 1.0
+
+scriptname=${0##*/}
+logfile=data/$scriptname.log
+configdir=data
+clusterconfig=data/cluster.json
+
+# set logging
+# 0 for nothing (silent)
+# 1 to log to $scriptname.log
+debug=0
+
+usage () {
+	cat << EOF
+usage: $scriptname
+$ $scriptname $BLUE init $RESET      (set up cluster authentication)
+EOF
+exit
+}
+
+timestamp () {
+	# desc: return a timestamp for logging
+  # args: none
+	# return format: 'YYYY-MM-DD HH:MM:SS SECONDS-SINCE-1970'
+  date '+%F %T %s'
+}
+
+logevent () {
+	# desc: logging facility
+  # $@: one arg (multi word) the log message
+  # logs event to global $logfile if debug=1
+	if [ $debug = 0 ]
+	then
+		return 0
+	elif [ $debug = 1 ]
+	then
+		echo "[$(timestamp)] $scriptname $@" >> $logfile
+	fi
+}
+
+colorize () {
+	# desc: rudimentary term inquiry to set output colorization
+	# args: none
+	if [ -x "$(command -v tput)" ]
+	then
+		logevent "f:$FUNCNAME: true[0]: tput exists and is executable, setting colors"
+		if [ $(tput colors) = 256 ]
+		then
+			logevent "f:$FUNCNAME: true[0]: tput reports 256 colors; setting color VAR tags"
+			GREEN="$(tput setaf 2)"
+			YELLOW="$(tput setaf 3)"
+			RED="$(tput setaf 1)"
+			BLUE="$(tput setaf 4)"
+			RESET="$(tput setaf 15)"
+		elif [ $(tput colors) = 8 ]
+		then
+			logevent "f:$FUNCNAME: true[0]: tput reports 8 colors; setting color VAR tags"
+			GREEN="$(tput setaf 2)"
+			YELLOW="$(tput setaf 3)"
+			RED="$(tput setaf 1)"
+			BLUE="$(tput setaf 4)"
+			RESET="$(tput setaf 8)"
+		else
+			logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
+		fi
+	fi
+}
+
+init () {
+	# desc: read config info from user and save to json
+	# arg: none
+	echo -n "Enter the IP address for the cluster: "
+	read IP
+	echo -n "Enter the username for API access [admin]: "
+	read USER
+	if [ -z $USER ]
+	then
+		USER=admin
+	fi
+	echo "we read IP = $IP"
+	echo "we read USER = $USER"
+	jq -n --arg IP $IP --arg USER $USER \
+		'{cluster_ip:$IP,username:$USER}' > $clusterconfig
+}
+
+#
+# MAIN
+#
+# test for term colors and set color VARS accordingly
+colorize
+
+# read the command arguments
+if [ $# -eq 0 ];
+then
+  usage
+else
+  while [ $# -gt 0 ]
+  do
+    case "$1" in
+      init)
+        if [ $# -gt 1 ]
+				then
+					usage
+        else
+					init
+					if [ $? = 0 ]
+					then
+						echo "$GREEN PASS $RESET run 'install build' next"
+						exit 
+					else
+						echo "$RED FAIL $RESET config file was not saved"
+						exit
+					fi
+				fi
+        ;;
+			*)
+				usage
+		esac
+	done
+fi
+
