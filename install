@@ -246,10 +246,8 @@ fetchFile () {
 	else
 		return 1
 	fi
-	for file in $files
-	do
-		eval $fetchpre $rawgit/$file > /dev/null 2>&1
-	done
+	eval $fetchpre $rawgit/$file > /dev/null 2>&1
+	logevent "f:$FUNCNAME: true[$?]: fetched $1 with $fetchpre"
 }
 
 whichFetch () {
