@@ -22,9 +22,9 @@ usage () {
 	cat << EOF
 usage: $scriptname
 $ $scriptname $BLUE check $RESET      (test the environment and identify missing tools)
-$ $scriptname $BLUE updateself $RESET (fetch the latest version of this script)
 $ $scriptname $BLUE build $RESET      (build the docker image)
 $ $scriptname $BLUE run $RESET        (run the container and attach to the shell)
+$ $scriptname $BLUE lucky $RESET      (roll the dice and run it all)
 EOF
 exit
 }
@@ -233,12 +233,9 @@ checkEnv () {
 	fi
 }
 
-fetchFiles () {
-	# desc: fetch the suite of files to support the app
-	# args: none
-	# TODO: fix this function...WAY too dangerous, and broken
-	# MAKE SURE NOT TO OVERWRITE EXISTING FILES!!!
-	files="Dockerfile README.md ntnx-api.splash"
+fetchFile () {
+	# desc: fetch a file from the github repository
+	# args: filename (per github ntnx-api repo)
 	whichFetch
 	if [ $? = 0 ]
 	then
@@ -281,8 +278,7 @@ buildImage () {
 	# args: none
 	# return 0 if success
 	# return 1 if build reports error
-	echo "[$GREEN $? $RESET] building docker image...may take some time; (tail -f dockerbuild.log)"
-	#(docker build --tag=periplume/ntnx-api:v1 . > dockerbuild.log 2>&1) &
+	echo "[$GREEN $? $RESET] building docker image...may take some time; (to watch: tail -f dockerbuild.log)"
 	(docker build --tag=$image . > dockerbuild.log 2>&1) &
 	spinner $!
 	echo "[$GREEN $? $RESET] success: run 'install run' next"
@@ -291,10 +287,21 @@ buildImage () {
 run () {
 	# run and attach to the container
 	echo "$GREEN PASS $RESET all tests passed...launching container now"
-	# use printf and say launching in 3...2...1...
-	sleep 3
+	for seconds in 3 2 1
+	do
+		if [ $seconds = 3 ]
+		then
+			COUNTCOLOR=$RED
+		elif [ $seconds = 2 ]
+		then
+			COUNTCOLOR=$YELLOW
+		else
+			COUNTCOLOR=$GREEN
+		fi
+		echo -ne "[$GREEN OK $RESET] launching NTNX-API container in $COUNTCOLOR $seconds $RESET...\r"
+		sleep 1
+	done
 	clear
-	#docker run -v $(pwd)/data:/nutanix/data -it periplume/ntnx-api:v1
 	docker run -v $(pwd)/data:/nutanix/data -it $image
 }
 
@@ -329,22 +336,6 @@ else
 					fi
 				fi
         ;;
-			fetchfiles)
-				if [ $# -gt 1 ]
-				then
-					usage
-				else
-					echo "DO fetch and replace"
-					fetchFiles
-					if [ $? = 0 ]
-					then
-						echo "$GREEN OK $RESET fetched files"
-					else
-						echo "$RED FAIL $RESET failed to fetch files"
-					fi
-					shift
-				fi
-				;;
 			build)
         if [ $# -gt 1 ]
 				then
@@ -355,13 +346,17 @@ else
 				fi
 				shift
 				;;
+			run)
+				run
+				shift
+				;;
 			lucky)
 				if [ $# -gt 1 ]
 				then
 					usage
 				else
 					checkEnv
-					fetchFiles
+					fetchFile Dockerfile
 					buildImage
 					run
 				fi
