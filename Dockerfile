@@ -26,7 +26,7 @@ ENV LD_LIBRARY_PATH="/usr/local/lib/"
 ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
 RUN apt-get update
 COPY --from=builder /usr/local /usr/local
-RUN apt-get install -y vim git gawk wget curl jq make
+RUN apt-get install -y vim git gawk wget curl jq make iputils-ping
 WORKDIR /nutanix
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN git clone git://github.com/psf/requests.git
