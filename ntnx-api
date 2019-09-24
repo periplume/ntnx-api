@@ -136,8 +136,10 @@ else
         ;;
 			help)
 				printhelp
+				;;
 			*)
 				usage
+				;;
 		esac
 	done
 fi
