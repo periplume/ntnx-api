@@ -41,5 +41,6 @@ RUN cd cloud-init ; python setup.py build
 RUN cd cloud-init ; python setup.py install
 RUN git clone git://github.com/nutanixdev/code-samples.git
 RUN git clone git://github.com/sandeep-car/api-lab.git
-ADD ntnx-api.splash .
+RUN git clone git://github.com/periplume/ntnx-api.git .
+RUN rm install Dockerfile README.md
 CMD cat ntnx-api.splash && bash
