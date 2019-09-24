@@ -246,7 +246,7 @@ fetchFile () {
 	else
 		return 1
 	fi
-	eval $fetchpre $rawgit/$file > /dev/null 2>&1
+	eval $fetchpre $rawgit/$1 > /dev/null 2>&1
 	logevent "f:$FUNCNAME: true[$?]: fetched $1 with $fetchpre"
 }
 
