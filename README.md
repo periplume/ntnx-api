@@ -10,7 +10,7 @@ You say API, I say let's *see it* in action.  I don't like GUIs, however pretty
 and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 
 ## Requirements
-1. Linux or Mac
+1. Linux or Mac  (tested on Ubuntu 18.04 and Mac OS 10.14.6)
 2. Docker
 
 ## Includes
@@ -18,31 +18,29 @@ and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 2. Openssl 1.1.1d (compiled from source)
 3. requests (HTTP library for Python: ```https://github.com/psf/requests```)
 4. vim
-5. cloud-init
-6. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
+5. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
 
 ## Installation instructions
 
 Can be installed with wget:
 ```
-# wget -O install https://github.com/periplume/ntnx-api/raw/master/install && chmod 755 install
-# ./install
+# wget -O ntnx-api.install https://github.com/periplume/ntnx-api/raw/master/ntnx-api.install && chmod 755 ntnx-api.install
+# ./ntnx-api.install
 ```
 
 Can be installed with curl:
 ```
-# curl -OL https://github.com/periplume/ntnx-api/raw/master/install && chmod 755 install
-# ./install
+# curl -OL https://github.com/periplume/ntnx-api/raw/master/ntnx-api.install && chmod 755 ntnx-api.install
+# ./ntnx-api.install
 ```
 
 Can also be installed with git:
 ```
 # git clone https://github.com/periplume/ntnx-api.git
-# cd ntnx-api ; ./install
+# mv ntnx-api/ntnx-api.install . ; ./ntnx-api.install
 ```
 
 Built as a docker multi-stage image.  Before the multi-stage, the image size
 exceeded 1GB.  After the multi-stage build, the image size was reduced by nearly
 50%.  See Dockerfile for details.
 
-TODO: move stable image to dockerhub to avoid the docker build times (~15 min)
