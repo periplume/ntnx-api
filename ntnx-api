@@ -5,9 +5,9 @@
 # version 1.0
 
 scriptname=${0##*/}
-logfile=data/$scriptname.log
-configdir=data
-clusterconfig=data/cluster.json
+logfile=logs/$scriptname.log
+configdir=cfg
+clusterconfig=cfg/cluster.json
 
 # set logging
 # 0 for nothing (silent)
@@ -82,7 +82,7 @@ colorize () {
 			YELLOW="$(tput setaf 3)"
 			RED="$(tput setaf 1)"
 			BLUE="$(tput setaf 4)"
-			RESET="$(tput setaf 7)"
+			RESET="$(tput setaf 9)"
 		else
 			logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
 		fi
