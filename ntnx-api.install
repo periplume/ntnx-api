@@ -9,7 +9,7 @@ logfile=logs/$scriptname.log
 rawgit=https://github.com/periplume/ntnx-api/raw/master
 rawgitself=$rawgit/$scriptname
 image=periplume/ntnx-api
-tag=v2
+tag=v1
 imagetag=$image:$tag
 
 # set logging
