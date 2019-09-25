@@ -29,10 +29,10 @@ RUN apt-get update
 COPY --from=builder /usr/local /usr/local
 RUN apt-get install -y vim git gawk wget curl jq make iputils-ping
 WORKDIR /nutanix
-RUN mkdir code cfg bin logs
+RUN mkdir code cfg bin logs src
 RUN python -m pip install --upgrade pip setuptools wheel
-RUN cd code ; git clone git://github.com/psf/requests.git
-RUN cd code/requests ; pip install .
+RUN cd src ; git clone git://github.com/psf/requests.git
+RUN cd src/requests ; pip install .
 #RUN pip install jinja2
 #RUN pip install configobj
 #RUN pip install pyyaml
@@ -41,9 +41,10 @@ RUN cd code/requests ; pip install .
 #RUN cd code ; git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
 #RUN cd code/cloud-init ; python setup.py build
 #RUN cd code/cloud-init ; python setup.py install
-RUN cd code ; git clone git://github.com/nutanixdev/code-samples.git
-RUN cd code ; git clone git://github.com/sandeep-car/api-lab.git
-RUN cd code ; git clone git://github.com/periplume/ntnx-api.git
-RUN cp code/ntnx-api/ntnx-api bin
-RUN cp code/ntnx-api/ntnx-api.splash .
-CMD cat ntnx-api.splash && bash
+#RUN cd code ; git clone git://github.com/nutanixdev/code-samples.git
+#RUN cd code ; git clone git://github.com/sandeep-car/api-lab.git
+#RUN cd code ; git clone git://github.com/periplume/ntnx-api.git
+#RUN cp code/ntnx-api/ntnx-api bin
+#RUN cp code/ntnx-api/ntnx-api.splash .
+#CMD cat ntnx-api.splash && bash
+CMD bash
