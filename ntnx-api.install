@@ -301,7 +301,11 @@ buildImage () {
 	# args: none
 	# return 0 if success
 	# return 1 if build reports error
-	fetchFile Dockerfile
+	#fetchFile Dockerfile
+	git clone git://github.com/nutanixdev/code-samples.git code/code-samples > /dev/null 2>&1
+	git clone git://github.com/sandeep-car/api-lab.git code/api-lab > /dev/null 2>&1
+	git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
+	#cp code/ntnx-api/Dockerfile .
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
 	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
 	pid=$!
@@ -348,9 +352,14 @@ run () {
 	clear
 	docker run -v $(pwd)/code:/nutanix/code \
 		-v $(pwd)/cfg:/nutanix/cfg \
-		-v $(pwd)/bin:/nutanix/bin \
 		-v $(pwd)/logs:/nutanix/logs \
 		-it $imagetag
+	#docker run \
+	#	--mount type=volume,source="$(pwd)"/code,target=/nutanix/code \
+	#	--mount type=volume,source="$(pwd)"/cfg,target=/nutanix/cfg \
+	#	--mount type=volume,source="$(pwd)"/bin,target=/nutanix/bin \
+	#	--mount type=volume,source="$(pwd)"/logs,target=/nutanix/logs \
+	#	-it $imagetag
 }
 
 #
