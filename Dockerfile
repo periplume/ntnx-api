@@ -24,25 +24,24 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV LDFLAGS="-L/usr/local/lib/"
 ENV LD_LIBRARY_PATH="/usr/local/lib/"
 ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
+ENV PATH=".:/nutanix/bin:$PATH"
 RUN apt-get update
 COPY --from=builder /usr/local /usr/local
 RUN apt-get install -y vim git gawk wget curl jq make iputils-ping
 WORKDIR /nutanix
+RUN mkdir code cfg bin logs
 RUN python -m pip install --upgrade pip setuptools wheel
-RUN git clone git://github.com/psf/requests.git
-RUN cd requests ; pip install .
-RUN pip install jinja2
-RUN pip install configobj
-RUN pip install pyyaml
-RUN pip install jsonpatch
-RUN pip install jsonschema
-RUN git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
-RUN cd cloud-init ; python setup.py build
-RUN cd cloud-init ; python setup.py install
-RUN git clone git://github.com/nutanixdev/code-samples.git
-RUN git clone git://github.com/sandeep-car/api-lab.git
-# finally, finagle the rest of the code into the /nutanix base directory
-RUN git init ; git remote add origin git://github.com/periplume/ntnx-api.git ; git fetch ; git checkout origin/master -ft
-#RUN git clone git://github.com/periplume/ntnx-api.git .
-RUN rm install Dockerfile README.md
+RUN cd code ; git clone git://github.com/psf/requests.git
+RUN cd code/requests ; pip install .
+#RUN pip install jinja2
+#RUN pip install configobj
+#RUN pip install pyyaml
+#RUN pip install jsonpatch
+#RUN pip install jsonschema
+#RUN cd code ; git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
+#RUN cd code/cloud-init ; python setup.py build
+#RUN cd code/cloud-init ; python setup.py install
+RUN cd code ; git clone git://github.com/nutanixdev/code-samples.git
+RUN cd code ; git clone git://github.com/sandeep-car/api-lab.git
+RUN cd code ; git clone git://github.com/periplume/ntnx-api.git
 CMD cat ntnx-api.splash && bash
