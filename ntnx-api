@@ -25,6 +25,7 @@ exit
 printhelp () {
 	# desc: print out help info
 	cat << EOF
+
 step one: configure for an existing cluster
 $BLUE # ntnx-api init $RESET
  (use either a CVM IP, the CVM VIP, or the PE IP, depending on use case)
@@ -34,7 +35,8 @@ $BLUE # ntnt-api testauth $RESET
  (this will prompt for a password, connect to the cluster, and
  record the cluster UUID into the config file)
 
-step three: script $RED rad $RESET tools
+step three: script some $RED rad $RESET tools!
+
 EOF
 exit
 }
@@ -80,7 +82,7 @@ colorize () {
 			YELLOW="$(tput setaf 3)"
 			RED="$(tput setaf 1)"
 			BLUE="$(tput setaf 4)"
-			RESET="$(tput setaf 8)"
+			RESET="$(tput setaf 7)"
 		else
 			logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
 		fi
@@ -89,7 +91,6 @@ colorize () {
 
 init () {
 	# desc: read config info from user and save to json
-	# arg: none
 	echo -n "Enter the IP address for the cluster: "
 	read IP
 	echo -n "Enter the username for API access [admin]: "
@@ -98,10 +99,16 @@ init () {
 	then
 		USER=admin
 	fi
-	echo "we read IP = $IP"
-	echo "we read USER = $USER"
 	jq -n --arg IP $IP --arg USER $USER \
 		'{cluster_ip:$IP,username:$USER}' > $clusterconfig
+	if [ $? = 0 ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: successfully wrote json config in $clusterconfig"
+		return 0
+	else
+		logevent "f:$FUNCNAME: err[$?]: failed to write json config in $clusterconfig"
+		return 1
+	fi
 }
 
 #
@@ -126,7 +133,7 @@ else
 					init
 					if [ $? = 0 ]
 					then
-						echo "$GREEN PASS $RESET run 'install build' next"
+						echo "$GREEN SUCCESS $RESET run 'ntnx-api test' next"
 						exit 
 					else
 						echo "$RED FAIL $RESET config file was not saved"
