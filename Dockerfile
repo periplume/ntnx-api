@@ -33,18 +33,6 @@ RUN mkdir code cfg bin logs src
 RUN python -m pip install --upgrade pip setuptools wheel
 RUN cd src ; git clone git://github.com/psf/requests.git
 RUN cd src/requests ; pip install .
-#RUN pip install jinja2
-#RUN pip install configobj
-#RUN pip install pyyaml
-#RUN pip install jsonpatch
-#RUN pip install jsonschema
-#RUN cd code ; git clone -b ubuntu/bionic https://git.launchpad.net/cloud-init
-#RUN cd code/cloud-init ; python setup.py build
-#RUN cd code/cloud-init ; python setup.py install
-#RUN cd code ; git clone git://github.com/nutanixdev/code-samples.git
-#RUN cd code ; git clone git://github.com/sandeep-car/api-lab.git
-#RUN cd code ; git clone git://github.com/periplume/ntnx-api.git
-#RUN cp code/ntnx-api/ntnx-api bin
-#RUN cp code/ntnx-api/ntnx-api.splash .
-#CMD cat ntnx-api.splash && bash
-CMD bash
+ADD code/ntnx-api/ntnx-api bin
+ADD code/ntnx-api/ntnx-api.splash .
+CMD cat ntnx-api.splash && bash
