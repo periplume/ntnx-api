@@ -1,0 +1,450 @@
+#!/usr/bin/env bash
+# desc: install/run scipt for dockerized NTNX RestAPI dev env
+# author: Jason Lindemuth
+# source: https://github.com/periplume/ntnx-api
+# version 1.0
+
+scriptname=${0##*/}
+logfile=logs/$scriptname.log
+rawgit=https://github.com/periplume/ntnx-api/raw/master
+rawgitself=$rawgit/$scriptname
+image=periplume/ntnx-api
+tag=v2
+imagetag=$image:$tag
+
+# set logging
+# 0 for nothing (silent)
+# 1 to log to logs/$scriptname.log
+debug=1
+
+# tools we need in this script
+commands="date git docker diff"
+
+usage () {
+	# desc: print usage info
+	cat << EOF
+usage: $scriptname
+$ $scriptname $BLUE check $RESET      (test the environment and identify missing tools)
+$ $scriptname $BLUE build $RESET      (build the docker image)
+$ $scriptname $BLUE run $RESET        (run the container and attach to the shell)
+$ $scriptname $BLUE lucky $RESET      (roll the dice and run it all)
+EOF
+}
+
+spinner () {
+	# fancy whirligig to indicate we're waiting on a long running task
+	# care of http://fitnr.com/showing-a-bash-spinner.html
+	local pid=$1
+	local delay=0.75
+	local spinstr='|/-\'
+	while [ "$(ps a | awk '{print $1}' | grep $pid)" ]; do
+		local temp=${spinstr#?}
+		printf "[ %c ]  " "$spinstr"
+		local spinstr=$temp${spinstr%"$temp"}
+		sleep $delay
+		printf "\b\b\b\b\b\b\b"
+	done
+	printf "    \b\b\b\b"
+}
+
+checkDirs () {
+	# desc: check for existing directories we map into docker container as volumes
+	# args: none
+	# return 0 if they exist
+	# return 1 is missing and cannot create
+	subdirs="logs cfg code bin"
+	for subdir in $subdirs
+	do
+		if [ ! -d $subdir ]
+		then
+			logevent "f:$FUNCNAME: err[1]: missing $subdir; using mkdir"
+			mkdir $subdir
+			if [ $? -ne 0 ]
+			then
+				logevent "f:$FUNCNAME: err[1]: failed to mkdir $subdir; check permissions"
+				LOCALDIRFAIL=true
+			fi
+		else
+			logevent "f:$FUNCNAME: info[0]: $subdir exists"
+		fi
+	done
+	if [ -z $LOCALDIRFAIL ]
+	then
+		return 0
+	else
+		return 1
+	fi
+}
+
+checkCommand () {
+	# desc: check for the existence and executability of a command
+	# arg: command name
+	# success: return 0
+	# failure: return 1
+	if [ -x "$(command -v $1)" ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: $1 exists and is executable"
+		return 0
+	else
+		logevent "f:$FUNCNAME: false[$?]: $1 missing or not executable"
+		return 1
+	fi
+}
+
+isOnline () {
+	# desc: determine if we're ONLINE and set global ONLINE=true
+	# args: none
+	# success: return 0 if online
+	# failure: return 1 if offline (or missing wget|curl)
+	# NOTE: assumes google.com = online; this can be improved
+	if [ "$FETCH" = curl ]
+	then
+		curl -sSf http://www.google.com > /dev/null 2>&1
+	elif [ "$FETCH" = wget ]
+	then
+		wget -q --spider http://www.google.com
+	else
+		logevent "f:$FUNCNAME: error: FETCH not set; missing wget and curl"
+		return 1
+	fi
+	if [ $? = 0 ]
+	then
+		logevent "f:$FUNCNAME: true[$?]: google.com is reachable; ONLINE=true"
+		ONLINE=true
+		return 0
+	else
+		logevent "f:$FUNCNAME: false[$?]: google.com is not reachable; ONLINE=false"
+		ONLINE=false
+		return 1
+	fi
+}
+
+isScriptCurrent () {
+	# desc: compare this script to the git master version
+	# args: none
+	# success: return 0 if files are same
+	# failure: return 1 if files are different
+	url=$rawgitself
+	if [ "$FETCH" = curl ]
+	then
+		curl -L -o .$scriptname.gitmaster $url > /dev/null 2>&1
+	elif [ "$FETCH" = wget ]
+	then
+		wget -q -O .$scriptname.gitmaster $url > /dev/null 2>&1
+	else
+		logevent "f:$FUNCNAME: error: FETCH not set; missing wget and curl"
+		return 1
+	fi
+	if [ $? = 0 ]
+	then
+		diff -q $scriptname .$scriptname.gitmaster > /dev/null 2>&1
+		if [ $? = 0 ]
+		then
+			logevent "f:$FUNCNAME: true[$?]: local and gitmaster are the same"
+			return 0
+		else
+			logevent "f:$FUNCNAME: false[$?]: local and gitmaster differ"
+			return 1
+		fi
+	else
+		logevent "f:$FUNCNAME: error[$?]: could not fetch install with $FETCH"
+		return 1
+	fi
+}
+
+timestamp () {
+	# desc: return a timestamp for logging
+  # args: none
+	# return format: 'YYYY-MM-DD HH:MM:SS SECONDS-SINCE-1970'
+  date '+%F %T %s'
+}
+
+logevent () {
+	# desc: logging facility
+  # $@: one arg (multi word) the log message
+  # logs event to global $logfile if debug=1
+	if [ $debug = 0 ]
+	then
+		return 0
+	elif [ $debug = 1 ]
+	then
+		echo "[$(timestamp)] $scriptname $@" >> $logfile
+	fi
+}
+
+colorize () {
+	# desc: rudimentary term inquiry to set output colorization
+	# args: none
+	if [ -x "$(command -v tput)" ]
+	then
+		if [ $(tput colors) = 256 ]
+		then
+			logevent "f:$FUNCNAME: true[0]: tput reports 256 colors; setting color VAR tags"
+			GREEN="$(tput setaf 2)"
+			YELLOW="$(tput setaf 3)"
+			RED="$(tput setaf 1)"
+			BLUE="$(tput setaf 4)"
+			RESET="$(tput setaf 15)"
+		elif [ $(tput colors) = 8 ]
+		then
+			logevent "f:$FUNCNAME: true[0]: tput reports 8 colors; setting color VAR tags"
+			GREEN="$(tput setaf 2)"
+			YELLOW="$(tput setaf 3)"
+			RED="$(tput setaf 1)"
+			BLUE="$(tput setaf 4)"
+			RESET="$(tput setaf 7)"
+		else
+			logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
+		fi
+	fi
+}
+
+checkTools () {
+	# desc: run tests to determine if we can run here
+	# args: none
+	# return 0 if PASS
+	# return 1 if FAIL
+	for CMD in $commands
+	do
+		var_name=${CMD}_exists
+		checkCommand $CMD
+		if [ $? = 0 ]
+			then
+			eval ${var_name}='0'
+		else
+			eval ${var_name}='1'
+		fi
+		if [ ${!var_name} = 0 ]
+		then
+			echo "[$GREEN ${!var_name} $RESET] $CMD exists"
+		else
+			echo "[$RED ${!var_name} $RESET] $CMD missing: please install $CMD"
+			CHECKOK=1
+		fi
+	done
+	if [ -z $CHECKOK ]
+	then
+		echo "$GREEN PASS $RESET command tools test passed"
+		if [ "$ONLINE" = true ]
+		then
+			echo "[$GREEN $? $RESET] ONLINE mode is true"
+			isScriptCurrent
+			if [ $? = 0 ]
+			then
+				echo "[$GREEN $? $RESET] script appears to be latest"
+			else
+				echo "[$YELLOW $? $RESET] script $YELLOW differs $RESET from git master"
+			fi
+		else
+			echo "[$YELLOW $? $RESET] ONLINE mode is false"
+			echo "[$YELLOW 1 $RESET] WARN: cannot test if script is current"
+		fi
+		return 0
+	else
+		echo "$RED FAIL $RESET command line tools test failed; install missing tools"
+		return 1
+	fi
+}
+
+fetchFile () {
+	# desc: fetch a file from the github repository
+	# args: filename (per github ntnx-api repo)
+	# warning: will overwrite existing file
+	# TODO: deal with existing file
+	whichFetch
+	if [ $? = 0 ]
+	then
+		fetchpre="wget -q "
+	elif [ $? = 1 ]
+	then
+		fetchpre="curl -OL "
+	else
+		return 1
+	fi
+	eval $fetchpre $rawgit/$1 > /dev/null 2>&1
+	logevent "f:$FUNCNAME: true[$?]: fetched $1 with $fetchpre"
+}
+
+whichFetch () {
+	# desc: return preferred http file transfer tool and set FETCH=wget|curl accordingly
+	# args: none
+	# return 0 for wget & curl
+	# return 1 for wget only
+	# return 2 for curl only
+	# return 3 for neither
+	checkCommand wget
+	if [ $? = 0 ]
+	then
+		WGET=true
+	fi
+	checkCommand curl
+	if [ $? = 0 ]
+	then
+		CURL=true
+	fi
+	if [[ -n "$CURL" && -n "$WGET" ]]
+	then
+		FETCH=curl
+		return 0
+	elif [[ -n "$CURL" && -z "$WGET" ]]
+	then
+		FETCH=curl
+		return 2
+	elif
+		[[ -z "$CURL" && -n "$WGET" ]]
+	then
+		FETCH=wget
+		return 1
+	else
+		return 3
+	fi
+}
+
+buildImage () {
+	# desc: build the docker image
+	# args: none
+	# return 0 if success
+	# return 1 if build reports error
+	#fetchFile Dockerfile
+	docker pull ubuntu:18.04 > /dev/null 2>&1
+	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
+	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
+	pid=$!
+	spinner $pid
+	wait $pid
+	if [ $? = 0 ]
+	then
+		echo "docker build success"
+		docker history $imagetag | tail -n +2 > logs/docker.$tag.layers
+		echo "[$GREEN $? $RESET] success: run 'install run' next"
+	else
+		echo "[$RED $? $RESET] failure: something failed in docker build, see dockerbuild.log"
+	fi
+}
+
+dockerClean () {
+	# desc: remove layers created by build tag
+	# arg: tag
+	buildlayers=logs/docker.$1.layers
+	cat $buildlayers | cut -d' ' -f1 | sed '/^<missing>/d' > $tag.layer.list
+	while read LINE
+	do
+		docker rmi -f "$LINE" > /dev/null 2>&1
+	done < $tag.layer.list
+	rm $tag.layer.list
+}
+
+run () {
+	# run and attach to the container
+	echo "$GREEN PASS $RESET all tests passed...launching container now"
+	for seconds in 3 2 1
+	do
+		if [ $seconds = 3 ]
+		then
+			COUNTCOLOR=$RED
+		elif [ $seconds = 2 ]
+		then
+			COUNTCOLOR=$YELLOW
+		else
+			COUNTCOLOR=$GREEN
+		fi
+		echo -ne "[$GREEN OK $RESET] launching NTNX-API container in $COUNTCOLOR $seconds $RESET...\r"
+		sleep 1
+	done
+	clear
+	docker run -v $(pwd)/data:/nutanix/data -it $imagetag
+}
+
+#
+# MAIN
+#
+# housekeeping stuff first
+# check and/or mkdir for docker volume maps
+checkDirs
+
+# test for term colors and set color VARS accordingly
+colorize
+
+# test for wget & curl and set FETCH=wget|curl accordingly
+whichFetch
+if [ $? = 3 ]
+then
+	echo "[$RED FAIL $RESET] missing wget & curl; please install one or both"
+	exit 1
+fi
+
+# test if we can reach google.com and set ONLINE=true|false accordingly
+isOnline
+
+# read the command arguments
+if [ $# -eq 0 ];
+then
+  usage
+	exit 0
+else
+  while [ $# -gt 0 ]
+  do
+    case "$1" in
+      check)
+        if [ $# -gt 1 ]
+				then
+					echo "ERROR: check takes no arguments"
+					usage
+					exit 1
+        else
+					echo "TESTING environment for required tools and conditions..."
+					checkTools
+					if [ $? = 0 ]
+					then
+						echo "$GREEN PASS $RESET run '$scriptname build' next"
+						exit 
+					else
+						echo "$RED FAIL $RESET please install the missing tools first"
+						exit
+					fi
+				fi
+        ;;
+			build)
+        if [ $# -gt 1 ]
+				then
+					echo "ERROR: build takes no arguments"
+					usage
+        else
+					buildImage
+				fi
+				shift
+				;;
+			clean)
+				if [ $# -gt 1 ]
+				then
+					echo" ERROR: clean takes no args"
+					usage
+					exit 1
+				else
+					dockerClean $tag
+				fi
+				shift
+				;;
+			run)
+				run
+				shift
+				;;
+			lucky)
+				if [ $# -gt 1 ]
+				then
+					usage
+				else
+					checkTools
+					fetchFile Dockerfile
+					buildImage
+					run
+				fi
+				shift
+				;;
+			*)
+				usage
+				exit 1
+		esac
+	done
+fi
+
