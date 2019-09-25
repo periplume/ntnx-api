@@ -57,15 +57,11 @@ checkDirs () {
 	do
 		if [ ! -d $subdir ]
 		then
-			logevent "f:$FUNCNAME: err[1]: missing $subdir; using mkdir"
 			mkdir $subdir
 			if [ $? -ne 0 ]
 			then
-				logevent "f:$FUNCNAME: err[1]: failed to mkdir $subdir; check permissions"
 				LOCALDIRFAIL=true
 			fi
-		else
-			logevent "f:$FUNCNAME: info[0]: $subdir exists"
 		fi
 	done
 	if [ -z $LOCALDIRFAIL ]
@@ -305,8 +301,7 @@ buildImage () {
 	# args: none
 	# return 0 if success
 	# return 1 if build reports error
-	#fetchFile Dockerfile
-	docker pull ubuntu:18.04 > /dev/null 2>&1
+	fetchFile Dockerfile
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
 	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
 	pid=$!
@@ -314,7 +309,6 @@ buildImage () {
 	wait $pid
 	if [ $? = 0 ]
 	then
-		echo "docker build success"
 		docker history $imagetag | tail -n +2 > logs/docker.$tag.layers
 		echo "[$GREEN $? $RESET] success: run 'install run' next"
 	else
@@ -352,7 +346,11 @@ run () {
 		sleep 1
 	done
 	clear
-	docker run -v $(pwd)/data:/nutanix/data -it $imagetag
+	docker run -v $(pwd)/code:/nutanix/code \
+		-v $(pwd)/cfg:/nutanix/cfg \
+		-v $(pwd)/bin:/nutanix/bin \
+		-v $(pwd)/logs:/nutanix/logs \
+		-it $imagetag
 }
 
 #
