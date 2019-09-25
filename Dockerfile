@@ -44,4 +44,5 @@ RUN cd code/requests ; pip install .
 RUN cd code ; git clone git://github.com/nutanixdev/code-samples.git
 RUN cd code ; git clone git://github.com/sandeep-car/api-lab.git
 RUN cd code ; git clone git://github.com/periplume/ntnx-api.git
-CMD cat ntnx-api.splash && bash
+RUN cp code/ntnx-api/ntnx-api bin
+CMD cat code/ntnx-api/ntnx-api.splash && bash
