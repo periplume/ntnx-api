@@ -1,6 +1,9 @@
 # ntnx-api
 A containerized collection of command-line api tools for Nutanix.
 
+You say API, I say let's *see it* in action. Everything is programmable.  Unbind
+yourself.  Automate!
+
 Design goal: a simplified, predictable, and easily reproducable development
 environment for the lazy among us.  Meant as a LAB environment for
 *demonstration* purposes only.  Terminal (command line) only.  
@@ -11,9 +14,6 @@ customers.
 
 **Not for production systems.  Use at your own risk.  Not supported by
 Nutanix.**
-
-You say API, I say let's *see it* in action.  I don't like GUIs, however pretty
-and delightful.  Everything is programmable.  Unbind yourself.  Automate!
 
 ## Requirements
 1. Linux (*Ubuntu 18.04* tested) or Mac (*MacOS 10.14.6* tested)
