@@ -9,7 +9,7 @@ environment for the lazy among us.  Meant as a LAB environment for
 *demonstration* purposes only.  Terminal (command line) only.  
 
 Use it to play around with the APIs.  Share it with customers who are curious
-about automation andi/or on the devops path.  Show it off to prospective
+about automation and/or on the devops path.  Show it off to prospective
 customers.  
 
 **Not for production systems.  Use at your own risk.  Not supported by
@@ -39,12 +39,6 @@ Can be installed with curl:
 ```
 # curl -OL https://github.com/periplume/ntnx-api/raw/master/ntnx-api.install && chmod 755 ntnx-api.install
 # ./ntnx-api.install
-```
-
-Can also be installed with git (untested):
-```
-# git clone https://github.com/periplume/ntnx-api.git
-# mv ntnx-api/ntnx-api.install . ; ./ntnx-api.install
 ```
 
 Once the container is running (if you're *lucky*) the user will be dropped into
