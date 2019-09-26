@@ -3,6 +3,7 @@
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
+# TODO add UNSAFE mode (password saving vs no password saving)
 
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
@@ -91,9 +92,18 @@ colorize () {
 
 init () {
 	# desc: read config info from user and save to json
-	echo -n "Enter the IP address for the cluster: "
+	if [ -a $clusterconfig ]
+	then
+		readIP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
+		readUser=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+	fi
+	echo -n "Enter the IP address for the cluster [$readIP]: "
 	read IP
-	echo -n "Enter the username for API access [admin]: "
+	if [ -z $IP ]
+	then
+		IP=$readIP
+	fi
+	echo -n "Enter the username for API access [$readUser]: "
 	read USER
 	if [ -z $USER ]
 	then
@@ -109,6 +119,22 @@ init () {
 		logevent "f:$FUNCNAME: err[$?]: failed to write json config in $clusterconfig"
 		return 1
 	fi
+}
+
+testauth () {
+	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
+	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+	echo -n "Please enter the password for $USERNAME: "
+	read -s PASSWORD
+	echo "thank you...fetching api data now"
+	AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
+	uuid=$(curl --insecure -X GET --connect-timeout 5 \
+		https://$IP:9440/api/nutanix/v3/users/me \
+		-H "Accept: application/json" \
+		-H "Authorization: Basic $AUTH_HEADER" \
+		-H "cache-control: no-cache" \
+		| jq -r '.status.resources.access_control_policy_reference_list[0].uuid')
+	echo $uuid
 }
 
 #
@@ -141,6 +167,10 @@ else
 					fi
 				fi
         ;;
+			test)
+				testauth
+				exit
+				;;
 			help)
 				printhelp
 				;;
