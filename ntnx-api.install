@@ -332,9 +332,9 @@ run () {
 	clear
 	docker run -v $(pwd)/code:/nutanix/code \
 		-v $(pwd)/cfg:/nutanix/cfg \
-		-v $(pwd)/logs:/nutanix/logs \
-		-v $(pwd)/bin:/nutanix/bin \
-		-it $imagetag
+		-v $(pwd)/logs:/nutanix/logs -it $imagetag 
+		#-v $(pwd)/bin:/nutanix/bin \
+		#-it $imagetag
 }
 
 #
