@@ -333,6 +333,7 @@ run () {
 	docker run -v $(pwd)/code:/nutanix/code \
 		-v $(pwd)/cfg:/nutanix/cfg \
 		-v $(pwd)/logs:/nutanix/logs \
+		-v $(pwd)/bin:/nutanix/bin \
 		-it $imagetag
 }
 
