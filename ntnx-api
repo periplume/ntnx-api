@@ -134,7 +134,13 @@ testauth () {
 		-H "Authorization: Basic $AUTH_HEADER" \
 		-H "cache-control: no-cache" \
 		| jq -r '.status.resources.access_control_policy_reference_list[0].uuid')
-	echo $uuid
+		if [ $? = 0 ]
+		then
+			echo "$GREEN SUCCESS $RESET cluster at $IP responded..."
+			echo "  user: $USERNAME uuid: $uuid"
+		else
+			echo "$RED FAIL $RESET unable to connect to $IR; check password, user and ip"
+		fi
 }
 
 #
