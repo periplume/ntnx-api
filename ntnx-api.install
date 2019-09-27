@@ -417,7 +417,6 @@ else
 					usage
 				else
 					checkTools
-					fetchFile Dockerfile
 					buildImage
 					run
 				fi
