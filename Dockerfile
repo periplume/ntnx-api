@@ -27,7 +27,7 @@ ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
 ENV PATH=".:/nutanix/bin:$PATH"
 RUN apt-get update
 COPY --from=builder /usr/local /usr/local
-RUN apt-get install -y vim git gawk wget curl jq make iputils-ping
+RUN apt-get install -y vim git gawk wget curl jq make iputils-ping nmap
 WORKDIR /nutanix
 RUN mkdir code cfg bin logs src
 RUN python -m pip install --upgrade pip setuptools wheel
