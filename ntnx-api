@@ -3,7 +3,6 @@
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
-# TODO add UNSAFE mode (password saving vs no password saving)
 # use curl --raw-output to remove quotes (and need for tr) and -s for silent
 #set -x
 
@@ -42,8 +41,8 @@ $BLUE # ntnx-api init $RESET
 
 step two: test connectivity and authentication
 $BLUE # ntnt-api test $RESET
- (this will prompt for a password, connect to the cluster, and
- record the cluster UUID into the config file)
+ (this will attempt to connect to the cluster, and
+ report success with the user UUID)
 
 step three: script some $RED rad $RESET tools!
 
@@ -144,34 +143,6 @@ configReadKey () {
 	echo $value
 }
 
-scanForPrism () {
-	# desc: use nmap to identify possible open prism ports
-	# arg $1=network to scan (as expected by nmap)
-	# return list (with echo)
-	# return 0 if we found an open prism port
-	# return 1 if we did not (and return an empty list)
-	# WARNING: not all networks approve this activity...use with caution
-	# TODO: add stealth scans and background operation
-	port=9440
-	net=$1
-	echo "looking for open ports ($port) on network $net with nmap ..."
-	logevent "f:$FUNCNAME: info[0]: using nmap to scan for open port $port on $net"
-	nmap -oG scratch/portscan.out -sV --open -p $port $net > /dev/null 2>&1
-	list=$(cat scratch/portscan.out | grep "9440/open" | cut -d' ' -f2)
-	if [ -z "$list" ]
-	then
-		echo "no open prism port $port on network $net detected"
-		return 1
-	else
-		while read -r line
-		do
-			echo "adding $line to detected prism address list"
-			configAddDetectedAddress $line
-		done <<< "$list" 
-		return 0
-	fi
-}
-
 configAddDetectedAddress () {
 	# desc: append to cluster.json .detected_ips["address"]
 	# arg 1 = ip address
@@ -255,7 +226,6 @@ configBackup () {
 	fi
 }
 
-
 configRead () {
 	# desc: read in CLUSTER_CFG from $clusterconfig file on disk
 	# TODO: add some sanity checks to make sure we've got a good read
@@ -288,12 +258,12 @@ configInit () {
 }
 
 testauth () {
-	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
-	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
-	echo -n "Please enter the password for $USERNAME: "
-	read -s PASSWORD
-	echo "thank you...fetching api data now"
-	AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
+	#IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
+	IP=$(echo -n $CLUSTER_CFG | jq -r '.users[0].ip')
+	#USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+	USERNAME=$(echo -n $CLUSTER_CFG | jq -r '.users[0].user')
+	AUTH_HEADER=$(echo -n $CLUSTER_CFG | jq -r '.users[0].salt')
+	#AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
 	uuid=$(curl -s --insecure -X GET --connect-timeout 5 \
 		https://$IP:9440/api/nutanix/v3/users/me \
 		-H "Accept: application/json" \
@@ -345,18 +315,6 @@ else
 					fi
 				fi
         ;;
-			scan)
-				if [ $# -ne 2 ]
-				then
-					echo "$RED ERROR $RESET: scan requires arg: network or address target"
-					echo " eg # $scriptname scan 192.168.42.0/24"
-					usage
-					exit
-				else
-					scanForPrism $2
-				fi
-				exit
-				;;
 			test)
 				testauth
 				exit
