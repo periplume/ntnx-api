@@ -99,38 +99,6 @@ colorize () {
 	fi
 }
 
-OLDinit () {
-	# desc: read config info from user and save to json
-	if [ -a $clusterconfig ]
-	then
-		readIP=$(echo -n $CLUSTER_CFG | jq -r '.cluster_ip')
-		readUSER=$(echo -n $CLUSTER_CFG | jq -r '.username')
-	fi
-	echo -n "Enter the IP address for the cluster [$readIP]: "
-	read IP
-	if [ -z $IP ]
-	then
-		IP=$readIP
-	fi
-	echo -n "Enter the username for API access [$readUSER]: "
-	read USER
-	if [ -z $USER ]
-	then
-		USER=admin
-	fi
-	jq -n --arg IP $IP --arg USER $USER \
-		'{cluster_ip:$IP,username:$USER}' > $clusterconfig
-	if [ $? = 0 ]
-	then
-		logevent "f:$FUNCNAME: true[$?]: successfully wrote json config in $clusterconfig"
-		return 0
-	else
-		logevent "f:$FUNCNAME: err[$?]: failed to write json config in $clusterconfig"
-		return 1
-	fi
-}
-
-
 userinit () {
 	# desc: read config info from user and save to json
 	DEFAULT_USER="admin"
@@ -157,20 +125,6 @@ userinit () {
 	configAddUser "$IP" "$USER" "$SALT"
 }
 
-
-
-# # cat cfg/cluster.json | jq -r '.detected_ips[]'
-# 192.168.42.120
-# 192.168.42.130
-# 192.168.42.131
-# 192.168.42.140
-
-
-# functions for config file manipulation
-# check for key:  jq -r '.key'
-# read key: jq -r '.key'
-# update key
-# 3 stage commit ?
 clusterConfigChangeKey () {
 	# desc: update value given key in cluster config
 	key=$1
@@ -181,22 +135,11 @@ clusterConfigChangeKey () {
 	echo $CLUSTER_CFG > $clusterconfig
 	rm cfg/.cluster.json.changing
 }
-# root@7c25107dcd7d:/nutanix# cat cfg/cluster.json | jq -r '.clusters[].cluster_uuid' 
-# 494c3a17-d121-4220-b526-02765af0a0a5
-# 494c4a17-d121-4220-b526-02765af0a0a5
-
-# root@7c25107dcd7d:/nutanix# scratch/ntnx-api getkey clusters | jq .[0].cluster_uuid
-# "494c3a17-d121-4220-b526-02765af0a0a5"
-
-
-# cat cfg/cluster.json | jq '. += {"test":["1.2.3.4","2,2.3.3."]}'
-# adds a new key at the top level whose value is a list with 2 elements
 
 configReadKey () {
 	# desc: read the value of a key given namespace as $1
 	# arg: key (eg .cluster_ip)
 	key=$1 ; echo $key
-	#value=$(echo -n $CLUSTER_CFG | jq -r ".[\"$key\"]")
 	value=$(echo -n $CLUSTER_CFG | jq -r --arg key $key ".$key")
 	echo $value
 }
@@ -251,26 +194,6 @@ configAddUser () {
 	CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg ip "$1" --arg user "$2" --arg salt "$3" '.users += [{"ip":$ip,"user":$user,"salt":$salt}]')
 	configSave
 }
-
-# save method
-# the full config file is read into memory as a variable $CLUSTER_CFG
-# all config reads are done against the global VAR
-# when the config changes:
-# 1. backup the config (need cfg backup function)
-# 2. check for cfg/.clusters.json.changing
-#  a. if this file exists, either the file is being changed
-#  b. or the last cfg save to disk did not complete cleanly
-# 3. loop thrice with wait (1, then 2, then 3?) for a.
-# 4. if this fails
-#  a. append alert object to .alerts[]
-#  b. write $CLUSTER_CFG to cfg/.$HOSTNAME.$(timestamp).clusters.json
-#  c. exit and explain the condition
-# 5. if we get clearance, do a 2-phase commit write
-#  a. touch cfg/.clusters.json.changing
-#  b. append log object to .changelog[] with $HOSTNAME
-#  c. write $CLUSTER_CFG to cfg/clusters.json
-#  d. remove cfg/.clusters.json.changing
-# return exit code accordingly (0=success, >0=failure)
 
 configSave () {
 	# desc: safely write in-memory config to live config file on disk
@@ -364,17 +287,6 @@ configInit () {
 	fi
 }
 
-# functions for api get
-curlGETHeaders () {
-	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
-	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
-	AUTH_SALT=$(echo -n $USERNAME:$PASSWORD | base64)
-	commandstring="curl -s --insecure -X GET --connect-timeout 5 \
-		-H "Accept: application:json" \
-		-H "cache-control: no-cache" \
-		-H "Authorization: Basic $AUTH_HEADER""
-}
-
 testauth () {
 	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
 	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
@@ -397,7 +309,6 @@ testauth () {
 		fi
 }
 
-
 #
 # MAIN
 #
@@ -406,6 +317,7 @@ colorize
 
 # read cluster config in as global CLUSTER_CFG
 configRead
+
 # backup cluster config for security
 configBackup
 
@@ -422,7 +334,7 @@ else
 				then
 					usage
         else
-					init
+					userinit
 					if [ $? = 0 ]
 					then
 						echo "$GREEN SUCCESS $RESET run 'ntnx-api test' next"
@@ -433,10 +345,6 @@ else
 					fi
 				fi
         ;;
-			userinit)
-				userinit
-				exit
-				;;
 			scan)
 				if [ $# -ne 2 ]
 				then
@@ -455,14 +363,6 @@ else
 				;;
 			backup)
 				configBackup
-				exit
-				;;
-			getkey)
-				configReadKey $2
-				exit
-				;;
-			updatekey)
-				clusterConfigChangeKey $2 $3
 				exit
 				;;
 			help)
