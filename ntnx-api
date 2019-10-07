@@ -15,8 +15,8 @@ logfile=logs/$scriptname.log
 configdir=cfg
 clusterconfig=cfg/cluster.json
 
-# read config file for additional settings
-. $configdir/$scriptname.config
+# read config file to set proper mode (SAFE vs UNSAFE)
+. $configdir/$scriptname.mode
 
 # set logging
 # 0 for nothing (silent)
@@ -349,7 +349,6 @@ configRead () {
 configInit () {
 	# desc: build cluster.json config file
 	# args: none
-	# TODO put cluster user defaults into ntnx-api.config
 	if [ -e $clusterconfig ]
 	then
 		echo "$RED ERROR $RESET: $clusterconfig exists"
