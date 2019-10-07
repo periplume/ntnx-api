@@ -3,7 +3,7 @@
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
-
+#set -x
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
 rawgit=https://github.com/periplume/ntnx-api/raw/master
@@ -27,7 +27,7 @@ usage: $scriptname
 $ $scriptname $BLUE check $RESET      (test the environment and identify missing tools)
 $ $scriptname $BLUE build $RESET      (build the docker image)
 $ $scriptname $BLUE run $RESET        (run the container and attach to the shell)
-$ $scriptname $BLUE lucky $RESET      (roll the dice and run it all)
+$ $scriptname $BLUE lucky $RESET      (roll the dice and run all three)
 EOF
 }
 
@@ -52,7 +52,7 @@ checkDirs () {
 	# args: none
 	# return 0 if they exist
 	# return 1 is missing and cannot create
-	subdirs="logs cfg code bin"
+	subdirs="logs cfg code bin scratch"
 	for subdir in $subdirs
 	do
 		if [ ! -d $subdir ]
@@ -77,6 +77,7 @@ checkCommand () {
 	# arg: command name
 	# success: return 0
 	# failure: return 1
+	# TODO apple git may not be activated...improve test for git usability
 	if [ -x "$(command -v $1)" ]
 	then
 		logevent "f:$FUNCNAME: true[$?]: $1 exists and is executable"
@@ -282,10 +283,14 @@ buildImage () {
 	# args: none
 	# return 0 if success
 	# return 1 if build reports error
+	# TODO: move git clone work to a function and use a list of projects (ie make
+	# modular)
 	git clone git://github.com/nutanixdev/code-samples.git code/code-samples > /dev/null 2>&1
 	git clone git://github.com/sandeep-car/api-lab.git code/api-lab > /dev/null 2>&1
 	git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
-	cp code/ntnx-api/Dockerfile .
+	#cp code/ntnx-api/Dockerfile .
+	touch cfg/ntnx-api.config
+	echo "SAFEMODE=true" >> cfg/ntnx-api.config
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
 	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
 	pid=$!
@@ -301,8 +306,10 @@ buildImage () {
 }
 
 dockerClean () {
-	# desc: remove layers created by build tag
+	# desc: indelicate removal of all layers created by build tag 
+	# (try to clean up as best as possible)
 	# arg: tag
+	# TODO can do better tracking build and state
 	buildlayers=logs/docker.$1.layers
 	cat $buildlayers | cut -d' ' -f1 | sed '/^<missing>/d' > $tag.layer.list
 	while read LINE
@@ -312,8 +319,9 @@ dockerClean () {
 	rm $tag.layer.list
 }
 
-run () {
+runContainer () {
 	# run and attach to the container
+	# TODO: pass HOST_ envs to container (username, ip, uname)
 	echo "$GREEN PASS $RESET all tests passed...launching container now"
 	for seconds in 3 2 1
 	do
@@ -332,9 +340,8 @@ run () {
 	clear
 	docker run -v $(pwd)/code:/nutanix/code \
 		-v $(pwd)/cfg:/nutanix/cfg \
-		-v $(pwd)/logs:/nutanix/logs -it $imagetag 
-		#-v $(pwd)/bin:/nutanix/bin \
-		#-it $imagetag
+		-v $(pwd)/logs:/nutanix/logs \
+		-v $(pwd)/scratch:/nutanix/scratch -it $imagetag
 }
 
 #
@@ -408,7 +415,7 @@ else
 				shift
 				;;
 			run)
-				run
+				runContainer
 				shift
 				;;
 			lucky)
@@ -418,13 +425,14 @@ else
 				else
 					checkTools
 					buildImage
-					run
+					runContainer
 				fi
 				shift
 				;;
 			*)
 				usage
 				exit 1
+				;;
 		esac
 	done
 fi
