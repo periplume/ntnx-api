@@ -2,29 +2,53 @@
 # desc: cluster config setup script
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
-# version 1.0
-# TODO add UNSAFE mode (password saving vs no password saving)
+# version 2.0
 
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
 configdir=cfg
 clusterconfig=cfg/cluster.json
 
+# set mode (SAFE vs UNSAFE)
+. $configdir/$scriptname.mode
+
 # set logging
 # 0 for nothing (silent)
-# 1 to log to $scriptname.log
-debug=0
+# 1 to log basic stuff to $scriptname.log
+# 2 to log all the things
+debug=1
 
 usage () {
+	# desc: print out usage (depending on SAFEMODE)
+	if [ "$SAFEMODE" = "true" ] || [ "$SAFEMODE" = "" ]
+	then
 	cat << EOF
 usage: $scriptname
 $ $scriptname $BLUE init $RESET      (set up cluster authentication)
+$ $scriptname $GREEN printusers $RESET          (print user and ip address table)
+$ $scriptname $BLUE setdefaultuser $RESET      (change the default user and ip target)
+$ $scriptname $BLUE test $RESET      (test cluster connectivity and authentication)
+$ $scriptname $BLUE printconfig $RESET      (pretty print the json config)
 EOF
+	elif [ "$SAFEMODE" = "false" ]
+	then
+	cat << EOF
+usage: $scriptname
+$ $scriptname $GREEN init $RESET                set up cluster authentication
+$ $scriptname $GREEN printusers $RESET          print user and ip address table
+$ $scriptname $BLUE setdefaultuser $RESET      change the default user and ip target
+$ $scriptname $BLUE test $RESET                test cluster connectivity and authentication
+$ $scriptname $BLUE printconfig $RESET         pretty print the json config
+$ $scriptname $YELLOW backup $RESET              force backup of config to disk
+$ $scriptname $RED scan $RESET                scan for prism ports on net
+EOF
+	fi
 exit
 }
 
 printhelp () {
 	# desc: print out help info
+	# TODO update with fuller explanations
 	cat << EOF
 
 step one: configure for an existing cluster
@@ -32,7 +56,7 @@ $BLUE # ntnx-api init $RESET
  (use either a CVM IP, the CVM VIP, or the PE IP, depending on use case)
 
 step two: test connectivity and authentication
-$BLUE # ntnt-api testauth $RESET
+$BLUE # ntnt-api test $RESET
  (this will prompt for a password, connect to the cluster, and
  record the cluster UUID into the config file)
 
@@ -51,7 +75,7 @@ timestamp () {
 
 logevent () {
 	# desc: logging facility
-  # $@: one arg (multi word) the log message
+  # $@: one arg (multi word) log message
   # logs event to global $logfile if debug=1
 	if [ $debug = 0 ]
 	then
@@ -63,84 +87,587 @@ logevent () {
 }
 
 colorize () {
-	# desc: rudimentary term inquiry to set output colorization
+	# desc: user tput to set color tags for easy output colorzation
 	# args: none
+	# usage: enclose text output to terminal with color and reset tags
+	# eg: echo "a really $GREEN good $RESET result" will render "good" green
 	if [ -x "$(command -v tput)" ]
 	then
 		logevent "f:$FUNCNAME: true[0]: tput exists and is executable, setting colors"
-		if [ $(tput colors) = 256 ]
-		then
-			logevent "f:$FUNCNAME: true[0]: tput reports 256 colors; setting color VAR tags"
-			GREEN="$(tput setaf 2)"
-			YELLOW="$(tput setaf 3)"
-			RED="$(tput setaf 1)"
-			BLUE="$(tput setaf 4)"
-			RESET="$(tput setaf 15)"
-		elif [ $(tput colors) = 8 ]
-		then
-			logevent "f:$FUNCNAME: true[0]: tput reports 8 colors; setting color VAR tags"
-			GREEN="$(tput setaf 2)"
-			YELLOW="$(tput setaf 3)"
-			RED="$(tput setaf 1)"
-			BLUE="$(tput setaf 4)"
-			RESET="$(tput setaf 9)"
-		else
-			logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
-		fi
+		BLACK=$(tput setaf 0)
+		RED=$(tput setaf 1)
+		GREEN=$(tput setaf 2)
+		YELLOW=$(tput setaf 3)
+		BLUE=$(tput setaf 4)
+		MAGENTA=$(tput setaf 5)
+		CYAN=$(tput setaf 6)
+		WHITE=$(tput setaf 7)
+		BOLD=$(tput bold)
+		BLINK=$(tput blink)
+		REVERSE=$(tput smso)
+		UNDERLINE=$(tput smul)
+		RESET=$(tput sgr0)
+	else
+		logevent "f:$FUNCNAME: err[1]: tput colors reports number other than 8 or 256"
 	fi
 }
 
-init () {
-	# desc: read config info from user and save to json
-	if [ -a $clusterconfig ]
+userinit () {
+	# desc: prompt user for ip:user:[password] and save to cfg/cluster.json
+	# args: none
+	tries=3
+	while [ "$tries" -gt 0 ]
+	do
+		echo -n "[$BLUE USER $RESET] Enter the IP address for the cluster []: "
+		read IP
+		if [ -z $IP ]
+		then
+			echo "[$YELLOW WARNING $RESET] please enter a valid ip address"
+			tries=$((tries-1))
+		elif ! isIPValid $IP
+		then
+			echo "[$YELLOW WARNING $RESET] $IP is illegal; please enter a legal ip address"
+			tries=$((tries-1))
+		else
+			echo "[$GREEN INFO $RESET] $IP was accepted"
+			break
+		fi
+		if [ "$tries" = 0 ]
+		then
+			echo "[$RED ERROR $RESET] cluster IP address required to initialize"
+			exit
+		fi
+	done
+	tries=2
+	while [ "$tries" -gt 0 ]
+	do
+		echo -n "[$BLUE USER $RESET] Enter the username for API access at $IP []: "
+		read USER
+		if [ -z $USER ]
+		then
+			echo "[$YELLOW WARNING $RESET] please enter a valid username"
+			tries=$((tries-1))
+		elif [ "$SAFEMODE" = "true" ] || [ "$SAFEMODE" = "" ] && [ "$USER" = "admin" ]
+		then
+			echo "[$YELLOW WARNING $RESET] user $USER not allowed when SAFEMODE=true"
+			tries=$((tries-1))
+		else
+			echo "[$GREEN INFO $RESET] $USER was accepted"
+			break
+		fi
+		if [ "$tries" = 0 ]
+		then
+			echo "[$RED ERROR $RESET] username required to initialize"
+			exit
+		fi
+	done
+	if [ "$SAFEMODE" = "false" ]
 	then
-		readIP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
-		readUser=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+		tries=2
+		while [ "$tries" -gt 0 ]
+		do
+			echo -n "[$BLUE USER $RESET] Please enter the password for $USER: "
+			read -s PASSWORD
+			echo
+			if [ -z $PASSWORD ]
+			then
+				echo "[$YELLOW WARNING $RESET] please enter a password"
+				tries=$((tries-1))
+			else
+				echo "[$GREEN INFO $RESET] password accepted"
+				break
+			fi
+			if [ "$tries" = 0 ]
+			then
+				echo "[$RED ERROR $RESET] password required"
+				exit
+			fi
+		done
+		SALT=$(echo "$USER":"$PASSWORD" | base64)
+		configAddUser "$IP" "$USER" "$SALT"
+	else
+	  configAddUser "$IP" "$USER"
 	fi
-	echo -n "Enter the IP address for the cluster [$readIP]: "
-	read IP
-	if [ -z $IP ]
+}
+
+isIPValid () {
+	# care of https://stackoverflow.com/questions/13777387/check-for-ip-validity
+	# arg 1 = ip to check for valid range and format
+	# return 0 if legal
+	# return 1 if illegal
+  local ip=${1:-1.2.3.4}
+  local IFS=.; local -a a=($ip)
+  [[ $ip =~ ^[0-9]+(\.[0-9]+){3}$ ]] || return 1
+  local quad
+  for quad in {0..3}; do
+    [[ "${a[$quad]}" -gt 255 ]] && return 1
+  done
+  return 0
+}
+
+scanForPrism () {
+	# desc: use nmap to identify possible open prism ports
+	# arg $1=network to scan (as expected by nmap)
+	# return list (with echo)
+	# return 0 if we found an open prism port
+	# return 1 if we did not (and return an empty list)
+	# WARNING: not all networks approve this activity...use with caution
+	# TODO: add stealth scans and background operation
+	port=9440
+	net=$1
+	echo "[$GREEN INFO $RESET] looking for open ports ($port) on network $net ..."
+	logevent "f:$FUNCNAME: info[0]: using nmap to scan for open port $port on $net"
+	nmap -oG scratch/portscan.out -n -sV --open -p $port $net > /dev/null 2>&1
+	list=$(cat scratch/portscan.out | grep "9440/open" | cut -d' ' -f2)
+	if [ -z "$list" ]
 	then
-		IP=$readIP
+		echo "[$GREEN INFO $RESET ] no open prism port $port on network $net detected"
+		return 1
+	else
+		while read -r line
+		do
+			echo "[$GREEN INFO $RESET] adding $line to detected prism address list"
+			configAddDetectedAddress $line
+		done <<< "$list" 
+		return 0
 	fi
-	echo -n "Enter the username for API access [$readUser]: "
-	read USER
-	if [ -z $USER ]
+}
+
+configAddDetectedAddress () {
+	# desc: append to cluster.json .detected_ips["address"]
+	# arg 1 = ip address
+	# TODO add additional details for found hosts (a la addlog)
+	# timstamp containerid ip
+	addr=$1
+	contains=$(echo -n $CLUSTER_CFG | jq --arg addr "$addr" '.detected_ips | contains([$addr])')
+	# the above throws an error if the list doesn't yet exist
+	if [ "$contains" = "true" ]
 	then
-		USER=admin
+		echo "[$YELLOW WARN $RESET] $addr is a duplicate"
+	else
+		echo "[$GREEN INFO $RESET] $addr is unique...adding to detected_ips list"
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg addr $addr '.detected_ips += [$addr]')
+		configSave
 	fi
-	jq -n --arg IP $IP --arg USER $USER \
-		'{cluster_ip:$IP,username:$USER}' > $clusterconfig
+}
+
+# more generic logic to replace configAddDetectedAddress
+# function: append value to list
+# arg 1: the list (eg .detected_ips[])
+# arg 2: the value
+# 1. test for existence of list
+# 2. if not there, create
+# 3. if list exists, check for value with jq:contains
+# 4. if contains is true, don't add
+# 5. if contains is false, add
+# 6. done
+# i'm sure jq can do this in one pass
+
+# PRIMITIVES
+# users[] manipulation
+#
+user_getKeyIndex () {
+	# desc: for user key (ip:user) return index in users[]
+	# arg 1: ip
+	# arg 2: user 
+	# if found: echo key index number and return 0
+	# return 1 if none found (ie no user ip:user exists)
+	userindex=$(echo -n $CLUSTER_CFG | jq --arg ip "$1" --arg user "$2" '.users | map(.ip == $ip and .user == $user) | index(true)')
+	if [ "$userindex" = "null" ]
+	then
+		return 1
+	else
+		echo $userindex
+		return 0
+	fi
+}
+
+user_readKey () {
+	# desc: access and return the user object given user index number
+	# arg 1: index
+	# return string as key object and 0
+	# return 1 on error
+	userindex=$1
+	keyindex=$(user_getKeyIndex $1 $2)
+	echo -n $CLUSTER_CFG | jq  --argjson index "$userindex" '.users[$index]'
+}
+
+user_writeKey () {
+	# desc: write a new key object to .users[]
+	# arg 1: ip
+	# arg 2: user
+	# arg 3: salt (optional)
+	# return 0 if write success
+	# return 1 if write failed
+	ip=$1
+	user=$2
+	userkey="$1:$2"
+	ts=$(date +%s)
+	keyindex=$(user_getKeyIndex $1 $2)
+	if [ $? = 1 ]
+	then
+		defaultuser=true
+	fi
+	if [ -z $3 ]
+	then
+		# SAFEMODE
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg ip "$ip" --arg user "$user" --arg ts "$ts" '.users += [{ip:$ip,user:$user,created:$ts}]')
+	else
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg ip "$ip" --arg user "$user" --arg salt "$3" --arg ts "$ts" '.users += [{ip:$ip,user:$user,salt,$salt,created:$ts}]')
+	fi
+	if [ "$defaultuser" = "true" ]
+	then
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg v "$userkey" '.defaults += {user:$v}')
+	fi
+	configSave
 	if [ $? = 0 ]
 	then
-		logevent "f:$FUNCNAME: true[$?]: successfully wrote json config in $clusterconfig"
 		return 0
 	else
-		logevent "f:$FUNCNAME: err[$?]: failed to write json config in $clusterconfig"
 		return 1
 	fi
 }
 
-testauth () {
-	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
-	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
-	echo -n "Please enter the password for $USERNAME: "
-	read -s PASSWORD
-	echo "thank you...fetching api data now"
-	AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
-	uuid=$(curl --insecure -X GET --connect-timeout 5 \
-		https://$IP:9440/api/nutanix/v3/users/me \
-		-H "Accept: application/json" \
-		-H "Authorization: Basic $AUTH_HEADER" \
-		-H "cache-control: no-cache" \
-		| jq -r '.status.resources.access_control_policy_reference_list[0].uuid')
+configChangeDefaultUser () {
+	ip=$1
+	user=$2
+	userkey="$1:$2"
+	CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg v "$userkey" '.defaults += {user:$v}') 
+	configSave
+}
+
+user_updateKey () {
+	# desc: replace (or add) key value with with an updated one
+	# arg 1: ip
+	# arg 2: user
+	# arg 3: key
+	# arg 4: value
+	ip=$1
+	user=$2
+	key=$3
+	value=$4
+	ts=$(date +%s)
+	keyindex=$(user_getKeyIndex $1 $2)
+	CLUSTER_CFG=$(echo $CLUSTER_CFG | jq --argjson index "$keyindex" --arg key "$key" --arg value "$value" '.users[$index] += {($key):$value}')
+	configSave
+	if [ $? = 0 ]
+	then
+		return 0
+	else
+		return 1
+	fi
+}
+
+user_getKeyValue () {
+	# desc: given "ip:user" return value for given key
+	# arg 1: ip
+	# arg 2: user
+	# arg 3: key (eg users[1].created returns 1569976134)
+	# echo value and return 0 if found
+	# return 1 if not found
+	ip=$1
+	user=$2
+	key=$3
+	index=$(user_getKeyIndex "$ip" "$user")
+	#answer=$(echo -n $CLUSTER_CFG | jq -r --argjson index "$index" --arg key "$key" '.users[$index].$key')
+	answer1=$(echo -n $CLUSTER_CFG | jq -r --argjson index "$index" --arg key "$key" '.users[$index]')
+	answer=$(echo -n $answer1 | jq -r --arg key $key '.[$key]')
+	# fuck off jq and your shitty unix quoting pecularities
+	#echo "answer1=$answer1"
+	#echo "answer=$answer"
+	if [ ! -z "$answer" ] && [ ! "$answer" == "null" ]
+	then
+		echo $answer
+		return 0
+	else
+		return 1
+	fi
+}
+
+user_addlog () {
+	# desc: append entry to addlog
+	# arg 1: operation (eg adduser=1.2.3.4:admin)
+	# arg 2: state (intent|success|failure)
+	ts=$(date +%s)
+	op=$1
+	state=$2
+	log="$ts $HOSTNAME SAFEMODE=$SAFEMODE $op $state"
+	CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg log "$log" '.addlog += [$log]')
+	configSave
+}
+
+configAddUser () {
+	# desc: add user supplied IP:USER info
+	# arg: 1=ip 2=user 3=salt
+	ip=$1
+	user=$2
+	salt=$3 # optional, only if SAFEMODE=false
+	ts=$(date +%s)
+	userindex=$(user_getKeyIndex $ip $user)
+	if [ $? = 1 ]
+	then
+		# new user
+		user_addlog "adduser=$ip:$user" "intent"
+		if [ "$SAFEMODE" = "false" ]
+		then
+			user_writeKey "$ip" "$user" "$salt"
+			echo "[$GREEN INFO $RESET] added $user at $ip with salted password"
+		else
+			user_writeKey "$ip" "$user"
+			echo "[$GREEN INFO $RESET] added $user at $ip"
+		fi
 		if [ $? = 0 ]
 		then
-			echo "$GREEN SUCCESS $RESET cluster at $IP responded..."
-			echo "  user: $USERNAME uuid: $uuid"
+			user_addlog "adduser=$ip:$user" "success"
 		else
-			echo "$RED FAIL $RESET unable to connect to $IR; check password, user and ip"
+			user_addlog "adduser=$ip:$user" "failure"
 		fi
+	else
+		# existing user
+		echo "[$YELLOW WARNING $RESET] user $user at $ip already exists"
+		user_addlog "updateuser=$ip:$user" "intent"
+		if [ "$SAFEMODE" = "false" ]
+		then
+			user_updateKey "$ip" "$user" "salt" "$salt"
+			user_updateKey "$ip" "$user" "lastmodified" "$ts"
+		else
+			user_updateKey "$ip" "$user" "lastmodified" "$ts"
+		fi
+		if [ $? = 0 ]
+		then
+			user_addlog "updateuser=$ip:$user" "success"
+		else
+			user_addlog "updateuser=$ip:$user" "failure"
+		fi
+	fi
+}
+
+configPrintUsers () {
+	# desc: print a list of users (IP:USER) and mark DEFAULT
+	# add connected? and last connect date
+	# print passwords if SAFEMODE=false
+	userlist=$(echo -n $CLUSTER_CFG | jq -r '.users[] | [.ip,.user] | @csv')
+	printf "=====================================================\n"
+	printf "%s\n" "def  ip                  user"
+	printf "=====================================================\n"
+	for u in $userlist
+	do
+		u_ip=$(echo $u | cut -d, -f1 | tr -d '"')
+		u_user=$(echo $u | cut -d, -f2 | tr -d '"')
+		u_key="$u_ip:$u_user"
+		default_user=$(echo -n $CLUSTER_CFG | jq -r '.defaults.user')
+		if [ $u_key = $default_user ]
+		then
+			printf "%-5s%-20s%-30s\n" "${RED} *   ${RESET}" $u_ip "$u_user ${GREEN} (default) ${RESET}"
+		else
+			printf "%-5s%-20s%-30s\n" "" $u_ip $u_user
+		fi
+	done
+	printf "=====================================================\n"
+}
+
+configPrint () {
+	# desc: pretty print the full CLUSTER_CFG as raw json
+	echo -n $CLUSTER_CFG | jq '.'
+}
+
+configSave () {
+	# desc: safely write in-memory config to live config file on disk
+	local attempts=0
+	while [ $attempts -lt 4 ]
+	do
+		if [ -e cfg/.cluster.json.changing ]
+		then
+			logevent "f:$FUNCNAME: error[$?]: detected .cluster.json.changing"
+			attempts=$((attemps+1))
+			echo "detected .cluster.json.changing file, will retry in $attempts"
+			sleep $attempts
+		else
+			touch cfg/.cluster.json.changing
+			# TODO append changelog object to .changelog[] here
+			echo "$CLUSTER_CFG" > "$clusterconfig"
+			rm cfg/.cluster.json.changing
+			# TODO add exit code sanity
+			logevent "f:$FUNCNAME: info[$?]: cluster.json file successfully updated"
+			break
+		fi
+	done
+}
+
+configBackup () {
+	# desc: make backup copy of cfg/cluster.json
+	# args: none
+	# return 0 on success
+	# return 1 on failure (including diff !=0)
+	local TIMESTAMP=$(date +%s)
+	local backup="cfg/.cluster.json.$HOSTNAME.$TIMESTAMP"
+	local dbackup="$backup.disk"
+	local mbackup="$backup.mem"
+	local fbackup="$backup.backup"
+	cp $clusterconfig $dbackup
+	if [ $? = 0 ]
+	then
+		echo "$CLUSTER_CFG" > $mbackup
+		if [ $? = 0 ]
+		then
+			diff $dbackup $mbackup > /dev/null 2>&1
+			if [ $? = 0 ]
+			then
+				rm $mbackup
+				mv $dbackup $fbackup
+				logevent "f:$FUNCNAME: info[$?]: backed up config file successfully"
+				return 0
+			else
+				logevent "f:$FUNCNAME: false[$?]: warning, disk and memory cfg differed"
+				return 1
+			fi
+		else
+			logevent "f:$FUNCNAME: error[$?]: could not save memory CFG to disk"
+			return 1
+		fi
+	else
+		logevent "f:$FUNCNAME: error[$?]: could not save config file"
+		return 1
+	fi
+}
+
+
+configRead () {
+	# desc: read in CLUSTER_CFG from $clusterconfig file on disk
+	# TODO: add some sanity checks to make sure we've got a good read
+	if [ -e $clusterconfig ]
+	then
+		CLUSTER_CFG=$(cat $clusterconfig)
+		logevent "f:$FUNCNAME: info[$?]: successfully read $clusterconfig to \$CLUSTER_CFG"
+	else
+		echo "[$YELLOW WARNING $RESET] no config file found in $clusterconfig; initializing now"
+		configInit
+	fi
+}
+
+configInit () {
+	# desc: build cluster.json config file
+	# args: none
+	# TODO put cluster user defaults into ntnx-api.config
+	if [ -e $clusterconfig ]
+	then
+		echo "$RED ERROR $RESET: $clusterconfig exists"
+		return 1
+	else
+		touch $clusterconfig
+		jq -n --arg a initialized --arg b "$(date +%s)" '.state[$a] = $b' > $clusterconfig
+		CLUSTER_CFG=$(cat $clusterconfig)
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a init_humantime --arg b "$(date)" '.state[$a] += $b')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a container_hostname --arg b "$HOSTNAME" '.state[$a] += $b')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq '. + {"users":[]}')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq '. + {"clusters":[]}')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq '. + {"addlog":[]}')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq '. + {"detected_ips":[]}')
+		if [ "$SAFEMODE" = "false" ]
+		then
+			CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a admin --arg b "nutanix/4u" '.defaults[$a] += $b')
+		fi
+		configSave
+	fi
+}
+
+constructCurl () {
+	# desc: given input, build the curl command
+	# arg 1: ip
+	# arg 2: user
+	# arg 3: http method (GET,PUT,POST,DELETE)
+	# arg 4: api path (eg /api/nutanix/v3/users/me)
+	# arg 5: encoded user:pass
+	# use curl -o to write returned object to file
+	# return curl command as one string (use eval to run)
+	ip=$1
+	user=$2
+	method=$3
+	api=$4
+	salt=$5
+	basecmd="curl -s --insecure -X $method"
+	url="https://$ip:9440$api"
+	headers="-H 'Accept: application/json' -H 'Content-Type: application/json'"
+	auth="-H 'Authorization: Basic $salt'"
+	fullcommand="${basecmd} ${headers} ${auth} ${url}"
+	echo $fullcommand
+}
+
+# TODO: add curl option to output headers to file (curl -sD <file> ...)
+
+constructCurlv2 () {
+	ip=$1
+	user=$2
+	password=$3
+	method=$4
+	api=$5
+	basecmd="curl -s --insecure -u "$user:$password" -X $method"
+	url="https://$ip:9440$api"
+	headers="-H 'Accept: application/json' -H 'Content-Type: application/json'"
+	fullcommand="${basecmd} ${headers} ${url}"
+	echo $fullcommand
+}
+
+
+testAuth () {
+	# attempt to connect
+	test_ip=$(echo -n $CLUSTER_CFG | jq -r '.defaults.user' | cut -d: -f1)
+	test_user=$(echo -n $CLUSTER_CFG | jq -r '.defaults.user' | cut -d: -f2)
+	if [ "$SAFEMODE" = "true" ] || [ "$SAFEMODE" = "" ]
+	then
+		echo -n "Please enter the password for $user at $ip: "
+		read -s PASSWORD
+		echo
+		salt=$(echo -n $user:$PASSWORD | base64)
+	else
+		# attempt to fetch salt from config: known ip:user
+		salt=$(user_getKeyValue "$test_ip" "$test_user" "salt")
+		# add logic to handle null value
+	fi
+	#echo "1 $test_ip"
+	#echo "2 $test_user"
+	#echo "3 $salt"
+	curl_cmd=$(constructCurl "$test_ip" "$test_user" "GET" "/api/nutanix/v3/users/me" "$salt")
+	# add logic to deal with curl error
+	# curl exits with 3 on auth problems...in which case the json .code=401
+	echo $curl_cmd
+	server_response=$(eval $curl_cmd)
+	echo $server_response | jq '.'
+	api_version=$(echo $server_response | jq -r '.api_version')
+	user_uuid=$(echo $server_response | jq -r '.status.resources.access_control_policy_reference_list[].uuid')
+	user_type=$(echo $server_response | jq -r '.status.resources.access_control_policy_reference_list[].name')
+	echo "api_version=$api_version"
+	echo "user_uuid=$user_uuid"
+	echo "user_type=$user_type"
+	# now annotate in the config the following
+	# user ip:user last successful connection (timestamp, containerid, salt (if SAFEMODE=false))
+	# in users[] object or in connectlog[]?
+}
+
+getClusterUUID () {
+	# desc: connect to v2 api and GET the cluster info
+	# TODO: add option to take ip:user as arg rather than look up default
+	test_ip=$(echo -n $CLUSTER_CFG | jq -r '.defaults.user' | cut -d: -f1)
+	test_user=$(echo -n $CLUSTER_CFG | jq -r '.defaults.user' | cut -d: -f2)
+	if [ "$SAFEMODE" = "true" ] || [ "$SAFEMODE" = "" ]
+	then
+		echo -n "Please enter the password for $user at $ip: "
+		read -s PASSWORD
+		echo
+	else
+		# attempt to fetch salt from config: known ip:user
+		salt=$(user_getKeyValue "$test_ip" "$test_user" "salt")
+		PASSWORD=$(echo -n "$salt" | base64 --decode | cut -d: -f2)
+		# add logic to handle null value
+	fi
+	curl_cmd=$(constructCurlv2 "$test_ip" "$test_user" $PASSWORD "GET" "/api/nutanix/v2.0/cluster" )
+	#echo $curl_cmd
+	server_response=$(eval $curl_cmd)
+	echo $server_response | jq '.'
+	cluster_uuid=$(echo $server_response | jq -r '.cluster_uuid')
+	cluster_name=$(echo $server_response | jq -r '.name')
+	echo "cluster_uuid=$cluster_uuid"
+	echo "cluster_name=$cluster_name"
 }
 
 #
@@ -148,6 +675,12 @@ testauth () {
 #
 # test for term colors and set color VARS accordingly
 colorize
+
+# read cluster config in as global VAR: CLUSTER_CFG
+configRead
+
+# backup cluster config for security
+configBackup
 
 # read the command arguments
 if [ $# -eq 0 ];
@@ -162,19 +695,67 @@ else
 				then
 					usage
         else
-					init
+					userinit
 					if [ $? = 0 ]
 					then
-						echo "$GREEN SUCCESS $RESET run 'ntnx-api test' next"
+						echo "[$GREEN SUCCESS $RESET] run '$BLUE ntnx-api test $RESET' next"
 						exit 
 					else
-						echo "$RED FAIL $RESET config file was not saved"
+						echo "[$RED FAIL $RESET] config file was not saved"
 						exit
 					fi
 				fi
         ;;
+			printconfig)
+				configPrint
+				exit
+				;;
+			printusers)
+				configPrintUsers
+				exit
+				;;
+			setdefaultuser)
+				if [ $# -ne 3 ]
+				then
+					echo "$RED ERROR $RESET: setdefaultuser requires <ip> <username>"
+					echo " eg # $BLUE $scriptname setdefaultuser 10.10.10.150 restapiuser $RESET"
+					exit 1
+				else
+					configChangeDefaultUser $2 $3
+				fi
+				exit
+				;;
+			scan)
+				if [ $# -ne 2 ]
+				then
+					echo "$RED ERROR $RESET: scan requires arg: network or address target"
+					echo " eg # $scriptname scan 192.168.42.0/24"
+					exit 1
+				else
+					scanForPrism $2
+				fi
+				exit
+				;;
 			test)
-				testauth
+				testAuth
+				exit
+				;;
+			getcluster)
+				getClusterUUID
+				exit
+				;;
+			testcurl)
+				if [ $# -ne 5 ]
+				then
+					echo "$RED ERROR $RESET: testcurl requires [ip] [user] [method] [apipath]"
+					exit
+				else
+					constructCurl $2 $3 $4 $5
+					exit
+				fi
+				;;
+			backup)
+				configBackup
 				exit
 				;;
 			help)
@@ -186,4 +767,3 @@ else
 		esac
 	done
 fi
-
