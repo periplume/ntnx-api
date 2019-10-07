@@ -4,21 +4,30 @@
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
 # TODO add UNSAFE mode (password saving vs no password saving)
+# use curl --raw-output to remove quotes (and need for tr) and -s for silent
+#set -x
+
+# helpful https://jsoneditoronline.org/
+# helpful https://jqplay.org/
 
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
 configdir=cfg
 clusterconfig=cfg/cluster.json
 
+# read config file for additional settings
+. $configdir/$scriptname.config
+
 # set logging
 # 0 for nothing (silent)
 # 1 to log to $scriptname.log
-debug=0
+debug=1
 
 usage () {
 	cat << EOF
 usage: $scriptname
 $ $scriptname $BLUE init $RESET      (set up cluster authentication)
+$ $scriptname $BLUE test $RESET      (test cluster connectivity and authentication)
 EOF
 exit
 }
@@ -32,7 +41,7 @@ $BLUE # ntnx-api init $RESET
  (use either a CVM IP, the CVM VIP, or the PE IP, depending on use case)
 
 step two: test connectivity and authentication
-$BLUE # ntnt-api testauth $RESET
+$BLUE # ntnt-api test $RESET
  (this will prompt for a password, connect to the cluster, and
  record the cluster UUID into the config file)
 
@@ -90,12 +99,12 @@ colorize () {
 	fi
 }
 
-init () {
+OLDinit () {
 	# desc: read config info from user and save to json
 	if [ -a $clusterconfig ]
 	then
-		readIP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
-		readUser=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+		readIP=$(echo -n $CLUSTER_CFG | jq -r '.cluster_ip')
+		readUSER=$(echo -n $CLUSTER_CFG | jq -r '.username')
 	fi
 	echo -n "Enter the IP address for the cluster [$readIP]: "
 	read IP
@@ -103,7 +112,7 @@ init () {
 	then
 		IP=$readIP
 	fi
-	echo -n "Enter the username for API access [$readUser]: "
+	echo -n "Enter the username for API access [$readUSER]: "
 	read USER
 	if [ -z $USER ]
 	then
@@ -121,6 +130,252 @@ init () {
 	fi
 }
 
+
+userinit () {
+	# desc: read config info from user and save to json
+	DEFAULT_USER="admin"
+	echo -n "Enter the IP address for the cluster []: "
+	read IP
+	if [ -z $IP ]
+	then
+		IP="1.2.3.4"
+	fi
+	echo -n "Enter the username for API access [$DEFAULT_USER]: "
+	read USER
+	if [ -z $USER ]
+	then
+		USER=$DEFAULT_USER
+	fi
+	echo -n "Please enter the password for $USER: "
+	read -s PASSWORD
+	echo
+	if [ -z $PASSWORD ]
+	then
+		echo "ERROR: password required"
+	fi
+	SALT=$(echo "$USER":"$PASSWORD" | base64)
+	configAddUser "$IP" "$USER" "$SALT"
+}
+
+
+
+# # cat cfg/cluster.json | jq -r '.detected_ips[]'
+# 192.168.42.120
+# 192.168.42.130
+# 192.168.42.131
+# 192.168.42.140
+
+
+# functions for config file manipulation
+# check for key:  jq -r '.key'
+# read key: jq -r '.key'
+# update key
+# 3 stage commit ?
+clusterConfigChangeKey () {
+	# desc: update value given key in cluster config
+	key=$1
+	value=$2
+	new_cluster_cfg=$(echo -n $CLUSTER_CFG | jq ".[\"$key\"] = \"$value\"")
+	touch cfg/.cluster.json.changing
+	CLUSTER_CFG=$new_cluster_cfg
+	echo $CLUSTER_CFG > $clusterconfig
+	rm cfg/.cluster.json.changing
+}
+# root@7c25107dcd7d:/nutanix# cat cfg/cluster.json | jq -r '.clusters[].cluster_uuid' 
+# 494c3a17-d121-4220-b526-02765af0a0a5
+# 494c4a17-d121-4220-b526-02765af0a0a5
+
+# root@7c25107dcd7d:/nutanix# scratch/ntnx-api getkey clusters | jq .[0].cluster_uuid
+# "494c3a17-d121-4220-b526-02765af0a0a5"
+
+
+# cat cfg/cluster.json | jq '. += {"test":["1.2.3.4","2,2.3.3."]}'
+# adds a new key at the top level whose value is a list with 2 elements
+
+configReadKey () {
+	# desc: read the value of a key given namespace as $1
+	# arg: key (eg .cluster_ip)
+	key=$1 ; echo $key
+	#value=$(echo -n $CLUSTER_CFG | jq -r ".[\"$key\"]")
+	value=$(echo -n $CLUSTER_CFG | jq -r --arg key $key ".$key")
+	echo $value
+}
+
+scanForPrism () {
+	# desc: use nmap to identify possible open prism ports
+	# arg $1=network to scan (as expected by nmap)
+	# return list (with echo)
+	# return 0 if we found an open prism port
+	# return 1 if we did not (and return an empty list)
+	# WARNING: not all networks approve this activity...use with caution
+	# TODO: add stealth scans and background operation
+	port=9440
+	net=$1
+	echo "looking for open ports ($port) on network $net with nmap ..."
+	logevent "f:$FUNCNAME: info[0]: using nmap to scan for open port $port on $net"
+	nmap -oG scratch/portscan.out -sV --open -p $port $net > /dev/null 2>&1
+	list=$(cat scratch/portscan.out | grep "9440/open" | cut -d' ' -f2)
+	if [ -z "$list" ]
+	then
+		echo "no open prism port $port on network $net detected"
+		return 1
+	else
+		while read -r line
+		do
+			echo "adding $line to detected prism address list"
+			configAddDetectedAddress $line
+		done <<< "$list" 
+		return 0
+	fi
+}
+
+configAddDetectedAddress () {
+	# desc: append to cluster.json .detected_ips["address"]
+	# arg 1 = ip address
+	addr=$1
+	contains=$(echo -n $CLUSTER_CFG | jq --arg addr "$addr" '.detected_ips | contains([$addr])')
+	if [ "$contains" = "true" ]
+	then
+		echo "$addr is a duplicate"
+	else
+		echo "$addr is unique...adding to detected_ips list"
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg addr $addr '.detected_ips += [$addr]')
+		configSave
+	fi
+}
+
+configAddUser () {
+	# desc: add user supplied IP:USER:PASSWORD info
+	# arg: 1=ip 2=user 3=salt
+	ts=$(date +%s)
+	CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg ip "$1" --arg user "$2" --arg salt "$3" '.users += [{"ip":$ip,"user":$user,"salt":$salt}]')
+	configSave
+}
+
+# save method
+# the full config file is read into memory as a variable $CLUSTER_CFG
+# all config reads are done against the global VAR
+# when the config changes:
+# 1. backup the config (need cfg backup function)
+# 2. check for cfg/.clusters.json.changing
+#  a. if this file exists, either the file is being changed
+#  b. or the last cfg save to disk did not complete cleanly
+# 3. loop thrice with wait (1, then 2, then 3?) for a.
+# 4. if this fails
+#  a. append alert object to .alerts[]
+#  b. write $CLUSTER_CFG to cfg/.$HOSTNAME.$(timestamp).clusters.json
+#  c. exit and explain the condition
+# 5. if we get clearance, do a 2-phase commit write
+#  a. touch cfg/.clusters.json.changing
+#  b. append log object to .changelog[] with $HOSTNAME
+#  c. write $CLUSTER_CFG to cfg/clusters.json
+#  d. remove cfg/.clusters.json.changing
+# return exit code accordingly (0=success, >0=failure)
+
+configSave () {
+	# desc: safely write in-memory config to live config file on disk
+	local attempts=0
+	while [ $attempts -lt 4 ]
+	do
+		if [ -e cfg/.cluster.json.changing ]
+		then
+			logevent "f:$FUNCNAME: error[$?]: detected .cluster.json.changing"
+			attempts=$((attemps+1))
+			echo "detected .cluster.json.changing file, will retry in $attempts"
+			sleep $attempts
+		else
+			touch cfg/.cluster.json.changing
+			# TODO append changelog object to .changelog[] here
+			echo "$CLUSTER_CFG" > "$clusterconfig"
+			rm cfg/.cluster.json.changing
+			# TODO add exit code sanity
+			logevent "f:$FUNCNAME: info[$?]: cluster.json file successfully updated"
+			break
+		fi
+	done
+}
+
+configBackup () {
+	# desc: make backup copies of cfg/cluster.json
+	# args: none
+	# return 0 on success
+	# return 1 on failure (including diff !=0)
+	local TIMESTAMP=$(date +%s)
+	local backup="cfg/.cluster.json.$HOSTNAME.$TIMESTAMP"
+	local dbackup="$backup.disk"
+	local mbackup="$backup.mem"
+	local fbackup="$backup.backup"
+	cp $clusterconfig $dbackup
+	if [ $? = 0 ]
+	then
+		echo "$CLUSTER_CFG" > $mbackup
+		if [ $? = 0 ]
+		then
+			diff $dbackup $mbackup > /dev/null 2>&1
+			if [ $? = 0 ]
+			then
+				rm $mbackup
+				mv $dbackup $fbackup
+				logevent "f:$FUNCNAME: info[$?]: backed up config file successfully"
+				return 0
+			else
+				logevent "f:$FUNCNAME: false[$?]: warning, disk and memory cfg differed"
+				return 1
+			fi
+		else
+			logevent "f:$FUNCNAME: error[$?]: could not save memory CFG to disk"
+			return 1
+		fi
+	else
+		logevent "f:$FUNCNAME: error[$?]: could not save config file"
+		return 1
+	fi
+}
+
+
+configRead () {
+	# desc: read in CLUSTER_CFG from $clusterconfig file on disk
+	# TODO: add some sanity checks to make sure we've got a good read
+	if [ -e $clusterconfig ]
+	then
+		CLUSTER_CFG=$(cat $clusterconfig)
+		logevent "f:$FUNCNAME: info[$?]: successfully read $clusterconfig to \$CLUSTER_CFG"
+	else
+		echo "$YELLOW WARNING $RESET: no config file found in $clusterconfig; initializing now"
+		configInit
+	fi
+}
+
+configInit () {
+	# desc: build cluster.json config file
+	# args: none
+	# TODO put cluster user defaults into ntnx-api.config
+	if [ -e $clusterconfig ]
+	then
+		echo "$RED ERROR $RESET: $clusterconfig exists"
+		return 1
+	else
+		touch $clusterconfig
+		jq -n --arg a initialized --arg b "$(date +%s)" '.state[$a] = $b' > $clusterconfig
+		CLUSTER_CFG=$(cat $clusterconfig)
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a init_humantime --arg b "$(date)" '.state[$a] += $b')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a container_hostname --arg b "$HOSTNAME" '.state[$a] += $b')
+		CLUSTER_CFG=$(echo -n $CLUSTER_CFG | jq --arg a admin --arg b "nutanix/4u" '.defaults[$a] += $b')
+		configSave
+	fi
+}
+
+# functions for api get
+curlGETHeaders () {
+	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
+	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
+	AUTH_SALT=$(echo -n $USERNAME:$PASSWORD | base64)
+	commandstring="curl -s --insecure -X GET --connect-timeout 5 \
+		-H "Accept: application:json" \
+		-H "cache-control: no-cache" \
+		-H "Authorization: Basic $AUTH_HEADER""
+}
+
 testauth () {
 	IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
 	USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
@@ -128,7 +383,7 @@ testauth () {
 	read -s PASSWORD
 	echo "thank you...fetching api data now"
 	AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
-	uuid=$(curl --insecure -X GET --connect-timeout 5 \
+	uuid=$(curl -s --insecure -X GET --connect-timeout 5 \
 		https://$IP:9440/api/nutanix/v3/users/me \
 		-H "Accept: application/json" \
 		-H "Authorization: Basic $AUTH_HEADER" \
@@ -143,11 +398,17 @@ testauth () {
 		fi
 }
 
+
 #
 # MAIN
 #
 # test for term colors and set color VARS accordingly
 colorize
+
+# read cluster config in as global CLUSTER_CFG
+configRead
+# backup cluster config for security
+configBackup
 
 # read the command arguments
 if [ $# -eq 0 ];
@@ -173,8 +434,36 @@ else
 					fi
 				fi
         ;;
+			userinit)
+				userinit
+				exit
+				;;
+			scan)
+				if [ $# -ne 2 ]
+				then
+					echo "$RED ERROR $RESET: scan requires arg: network or address target"
+					echo " eg # $scriptname scan 192.168.42.0/24"
+					usage
+					exit
+				else
+					scanForPrism $2
+				fi
+				exit
+				;;
 			test)
 				testauth
+				exit
+				;;
+			backup)
+				configBackup
+				exit
+				;;
+			getkey)
+				configReadKey $2
+				exit
+				;;
+			updatekey)
+				clusterConfigChangeKey $2 $3
 				exit
 				;;
 			help)
