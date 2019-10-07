@@ -288,9 +288,9 @@ buildImage () {
 	git clone git://github.com/nutanixdev/code-samples.git code/code-samples > /dev/null 2>&1
 	git clone git://github.com/sandeep-car/api-lab.git code/api-lab > /dev/null 2>&1
 	git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
-	#cp code/ntnx-api/Dockerfile .
+	cp code/ntnx-api/Dockerfile .
 	touch cfg/ntnx-api.config
-	echo "SAFEMODE=true" >> cfg/ntnx-api.config
+	echo "SAFEMODE=true" > cfg/ntnx-api.mode
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
 	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
 	pid=$!
