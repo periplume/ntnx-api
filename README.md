@@ -22,10 +22,12 @@ Nutanix.**
 ## Includes
 1. Python 3.7.4 (compiled from source)
 2. Openssl 1.1.1d (compiled from source)
-3. requests (HTTP library for Python: ```https://github.com/psf/requests```)
-4. vim
+3. ```requests``` (HTTP library for Python: ```https://github.com/psf/requests```)
+4. ```vim``` (is there any other?)
 5. api-lab scripts (```https://github.com/sandeep-car/api-lab.git```)
-6. nutanix developer network (```https://github.com/nutanixdev/code-samples.git```)
+6. nutanix developer network code (```https://github.com/nutanixdev/code-samples.git```)
+7. ```jq``` (command line json manipulation tool)
+8. ```nmap``` (handy network port scanner)
 
 ## Installation instructions
 
@@ -55,9 +57,12 @@ of the host four directories are created (bin, cfg, code, logs).  Three of these
 persistance.  The "logs" directory is used for logging, the "cfg" for
 configuration files, and the "code" directory is where the git code samples are
 located.  These are **live** filesystems and equally visable to the host and the
-container, ie insecure.  I had trouble mounting the bin directory in the same
-way because of an ADD statement in the Dockerfile (and would like to fix
-that...hint hint to the docker experts among us).
+container, ie insecure.  Additionally, there is a "scratch" directory meant for
+easy movement of files between the host system and the container; I use this,
+eg, to move new scripts into the container to test things.  (I had trouble
+mounting the bin directory in the same way because of an ADD statement in the
+Dockerfile, and would like to fix that...hint hint to the docker experts among
+us.)
 
 Built as a docker multi-stage image.  Before the multi-stage, the image size
 exceeded 1GB.  After the multi-stage build, the image size was reduced by more
@@ -65,4 +70,3 @@ than 50%.  It's still a little heavy at 476MB, and can probably be optimized
 further.  See Dockerfile for details.
 
 Any and all feedback is welcome and encouraged.
-
