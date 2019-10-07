@@ -3,11 +3,6 @@
 # author: Jason Lindemuth
 # source: https://github.com/periplume/ntnx-api
 # version 1.0
-# use curl --raw-output to remove quotes (and need for tr) and -s for silent
-#set -x
-
-# helpful https://jsoneditoronline.org/
-# helpful https://jqplay.org/
 
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
@@ -258,12 +253,9 @@ configInit () {
 }
 
 testauth () {
-	#IP=$(cat cfg/cluster.json | jq '.cluster_ip' | tr -d '"')
 	IP=$(echo -n $CLUSTER_CFG | jq -r '.users[0].ip')
-	#USERNAME=$(cat cfg/cluster.json | jq '.username' | tr -d '"')
 	USERNAME=$(echo -n $CLUSTER_CFG | jq -r '.users[0].user')
 	AUTH_HEADER=$(echo -n $CLUSTER_CFG | jq -r '.users[0].salt')
-	#AUTH_HEADER="`echo -n $USERNAME:$PASSWORD | base64`"
 	uuid=$(curl -s --insecure -X GET --connect-timeout 5 \
 		https://$IP:9440/api/nutanix/v3/users/me \
 		-H "Accept: application/json" \
