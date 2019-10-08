@@ -6,8 +6,12 @@
 
 scriptname=${0##*/}
 logfile=logs/$scriptname.log
-rawgit=https://github.com/periplume/ntnx-api/raw/master
+
+# which git branch (master is release, v2-dev is development for v2 release)
+branch=v2-dev
+rawgit=https://raw.githubusercontent.com/periplume/ntnx-api/$branch
 rawgitself=$rawgit/$scriptname
+
 image=periplume/ntnx-api
 tag=v2
 imagetag=$image:$tag
@@ -288,7 +292,9 @@ buildImage () {
 	echo "[$GREEN 0 $RESET] fetching github code repos..."
 	git clone git://github.com/nutanixdev/code-samples.git code/code-samples > /dev/null 2>&1
 	git clone git://github.com/sandeep-car/api-lab.git code/api-lab > /dev/null 2>&1
-	git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
+	#git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
+	# make sure we're setting the proper git branch to get the latest if we choose
+	git clone -b $branch https://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
 	cp code/ntnx-api/Dockerfile .
 	echo "SAFEMODE=true" > cfg/ntnx-api.mode
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
