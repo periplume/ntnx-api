@@ -295,7 +295,8 @@ buildImage () {
 	#git clone git://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
 	# make sure we're setting the proper git branch to get the latest if we choose
 	git clone -b $branch https://github.com/periplume/ntnx-api.git code/ntnx-api > /dev/null 2>&1
-	cp code/ntnx-api/Dockerfile .
+	#cp code/ntnx-api/Dockerfile .
+	ln -s code/ntnx-api/Dockerfile Dockerfile
 	echo "SAFEMODE=true" > cfg/ntnx-api.mode
 	echo "[$GREEN 0 $RESET] building docker image...may take some time; (tail -f logs/dockerbuild.log)"
 	(docker build --tag=$imagetag . > logs/dockerbuild.log 2>&1) &
@@ -342,7 +343,9 @@ runContainer () {
 		sleep 1
 	done
 	clear
-	docker run -v $(pwd)/code:/nutanix/code \
+	timezone=$(cat /etc/timezone)
+	docker run -e TZ="$timezone" \
+	 	-v $(pwd)/code:/nutanix/code \
 		-v $(pwd)/cfg:/nutanix/cfg \
 		-v $(pwd)/logs:/nutanix/logs \
 		-v $(pwd)/scratch:/nutanix/scratch -it $imagetag 
@@ -436,6 +439,7 @@ else
 			*)
 				usage
 				exit 1
+				;;
 		esac
 	done
 fi
