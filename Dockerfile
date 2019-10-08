@@ -1,5 +1,6 @@
 # stage 1, build python and openssl from source
-FROM ubuntu:18.04 AS builder
+#FROM ubuntu:18.04 AS builder
+FROM ubuntu:19.04 AS builder
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update
 RUN apt-get install -y wget build-essential zlib1g-dev libffi-dev 
@@ -18,7 +19,8 @@ RUN ln -s pip3 /usr/local/bin/pip
 RUN pip install --upgrade pip
 
 # stage 2, copy build artifacts, install other binaries and packages
-FROM ubuntu:18.04
+#FROM ubuntu:18.04
+FROM ubuntu:19.04
 LABEL maintainer="Jason Lindemuth <jason.lindemuth@nutanix.com>"
 ARG DEBIAN_FRONTEND=noninteractive
 ENV LDFLAGS="-L/usr/local/lib/"
@@ -27,7 +29,7 @@ ENV CPPFLAGS="-I/usr/local/include -I/usr/local/include/openssl"
 ENV PATH=".:/nutanix/bin:$PATH"
 RUN apt-get update
 COPY --from=builder /usr/local /usr/local
-RUN apt-get install -y vim git gawk wget curl jq make iputils-ping systemd
+RUN apt-get install -y vim git gawk wget curl jq make iputils-ping nmap tzdata
 WORKDIR /nutanix
 RUN mkdir code cfg bin logs src
 RUN python -m pip install --upgrade pip setuptools wheel
