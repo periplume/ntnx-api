@@ -1,8 +1,8 @@
 
  -------------------------------------------
- |*        WELCOME TO NTNX-API           * |
+ |*        WELCOME TO NTNX-API (v2)      * |
  |                                         |
- |      to initialize for a cluster:       |
+ |         to initialize, run              |
  |                                         |
  |          # ntnx-api init                |
  |*                                      * |
